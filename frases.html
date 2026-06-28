@@ -3,25 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>BookMarked — Frases Subrayadas</title>
+<title>BookMarked — Lector de Libros</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #050505;
-  --surface: #111111;
-  --card: #1A1A1A;
-  --border: rgba(255,255,255,0.08);
-  --accent: #e8ff00;
-  --accent2: #ff9900;
-  --accent-soft: rgba(232,255,0,0.1);
+  --bg: #000000;
+  --surface: #0a0a0a;
+  --card: #111111;
+  --border: rgba(255,215,0,0.12);
+  --accent: #FFD700;
+  --accent2: #FFC200;
+  --accent-soft: rgba(255,215,0,0.1);
   --text: #FFFFFF;
-  --muted: #888;
+  --muted: #777;
   --radius-sm: 10px;
   --radius-md: 16px;
   --radius-lg: 22px;
   --ease: cubic-bezier(0.4,0,0.2,1);
-  --highlight: #ffe066;
-  --highlight-soft: rgba(255,224,102,0.15);
+  --highlight: #FFD700;
+  --highlight-soft: rgba(255,215,0,0.12);
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh}
@@ -56,7 +56,7 @@ button:active{transform:scale(0.97)}
 .book-color-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
 
 /* ===== BOOK LIST ===== */
-.book-list-item{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px;margin:0 16px 10px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:.2s var(--ease)}
+.book-list-item{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px;margin:0 16px 10px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:.2s var(--ease);border-left:3px solid var(--accent)}
 .book-list-item:active{opacity:.8;transform:scale(0.99)}
 .book-icon{width:44px;height:54px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px}
 .book-info{flex:1;min-width:0}
@@ -82,7 +82,7 @@ button:active{transform:scale(0.97)}
 .action-row .btn-primary,.action-row .btn-secondary{flex:1}
 
 /* ===== PHOTO UPLOAD AREA ===== */
-.upload-zone{background:var(--card);border:2px dashed var(--border);border-radius:var(--radius-md);margin:0 16px 16px;padding:40px 24px;text-align:center;cursor:pointer;transition:.2s var(--ease);position:relative;overflow:hidden}
+.upload-zone{background:var(--card);border:2px dashed rgba(255,215,0,0.3);border-radius:var(--radius-md);margin:0 16px 16px;padding:40px 24px;text-align:center;cursor:pointer;transition:.2s var(--ease);position:relative;overflow:hidden}
 .upload-zone:hover,.upload-zone.drag-over{border-color:var(--accent);background:var(--accent-soft)}
 .upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;font-size:100px}
 .upload-icon{font-size:48px;margin-bottom:12px;display:block}
@@ -124,7 +124,7 @@ button:active{transform:scale(0.97)}
 .sel-all-btn{font-size:13px;color:var(--accent);font-weight:600}
 
 /* ===== SUMMARY ===== */
-.summary-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;margin:0 16px 16px}
+.summary-box{background:var(--card);border:1px solid rgba(255,215,0,0.25);border-left:4px solid var(--accent);border-radius:var(--radius-md);padding:20px;margin:0 16px 16px}
 .summary-text{font-size:14px;line-height:1.75;color:var(--text);white-space:pre-wrap}
 .summary-copy-btn{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--accent);font-weight:600;margin-top:14px;padding:0}
 
@@ -202,7 +202,22 @@ button:active{transform:scale(0.97)}
 
 <!-- BIBLIOTECA -->
 <div id="screen-library" class="screen active">
-  <div class="page-header">
+  <!-- Anarcho-Capitalist banner -->
+  <div style="width:100%;height:6px;background:linear-gradient(90deg,#000 50%,#FFD700 50%)"></div>
+  <div style="padding:36px 20px 0;display:flex;align-items:center;gap:14px">
+    <!-- Anarcho-Capitalist flag SVG -->
+    <svg width="52" height="34" viewBox="0 0 52 34" style="border-radius:4px;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.5)" xmlns="http://www.w3.org/2000/svg">
+      <rect width="52" height="34" fill="#FFD700"/>
+      <polygon points="0,0 52,0 0,34" fill="#000"/>
+      <!-- Circle-A symbol -->
+      <text x="36" y="26" font-size="14" font-family="serif" font-weight="900" fill="#000" text-anchor="middle">Ⓐ</text>
+    </svg>
+    <div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;color:#FFD700;line-height:1">LECTOR DE LIBROS</div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:2px">Propiedad privada del conocimiento</div>
+    </div>
+  </div>
+  <div class="page-header" style="padding-top:16px">
     <div>
       <div class="page-title">Biblioteca</div>
       <div class="header-sub">Tus frases subrayadas</div>
@@ -431,10 +446,15 @@ button:active{transform:scale(0.97)}
   <div class="divider"></div>
 
   <div class="section-label">Acerca de</div>
-  <div class="settings-row">
-    <div>
-      <div class="settings-label">BookMarked</div>
-      <div class="settings-sub">v1.0 — Frases subrayadas con IA</div>
+  <div class="settings-row" style="flex-direction:column;align-items:center;gap:10px;border:1px solid rgba(255,215,0,0.2)">
+    <svg width="60" height="40" viewBox="0 0 60 40" style="border-radius:4px" xmlns="http://www.w3.org/2000/svg">
+      <rect width="60" height="40" fill="#FFD700"/>
+      <polygon points="0,0 60,0 0,40" fill="#000"/>
+      <text x="42" y="30" font-size="16" font-family="serif" font-weight="900" fill="#000" text-anchor="middle">Ⓐ</text>
+    </svg>
+    <div style="text-align:center">
+      <div class="settings-label" style="color:var(--accent);font-weight:700">BookMarked v1.0</div>
+      <div class="settings-sub" style="margin-top:4px">"La propiedad privada del conocimiento<br>no se grava, se acumula."</div>
     </div>
   </div>
 
