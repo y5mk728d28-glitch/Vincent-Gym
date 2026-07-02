@@ -422,15 +422,45 @@ button:active{transform:scale(0.97)}
     </div>
   </div>
 
+  <!-- Provider selector -->
   <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px">
+    <div class="settings-label">Proveedor de IA</div>
+    <div style="display:flex;gap:0;width:100%;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border)">
+      <button id="prov-btn-claude" onclick="setProvider('claude')"
+        style="flex:1;padding:11px 8px;font-size:13px;font-weight:700;transition:.2s;border-right:1px solid var(--border)">
+        🧠 Claude
+      </button>
+      <button id="prov-btn-gemini" onclick="setProvider('gemini')"
+        style="flex:1;padding:11px 8px;font-size:13px;font-weight:700;transition:.2s">
+        ✨ Gemini
+      </button>
+    </div>
+    <div id="provider-note" style="font-size:12px;color:var(--muted);line-height:1.5"></div>
+  </div>
+
+  <!-- Claude key block -->
+  <div id="claude-key-block" class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px;margin-top:8px">
     <div>
-      <div class="settings-label">Clave de API de Claude</div>
-      <div class="settings-sub">Necesaria para analizar fotos y generar resúmenes. Cada usuario usa la suya propia.</div>
+      <div class="settings-label">Clave API de Claude (Anthropic)</div>
+      <div class="settings-sub">console.anthropic.com · $5 de crédito gratis al registrarse</div>
     </div>
     <div id="api-key-display" class="key-preview">No configurada</div>
     <div style="display:flex;gap:8px;width:100%">
       <button class="btn-secondary" style="flex:1;padding:10px" onclick="openApiKeyModal()">Configurar clave</button>
       <button class="btn-danger" onclick="clearApiKey()">Borrar</button>
+    </div>
+  </div>
+
+  <!-- Gemini key block -->
+  <div id="gemini-key-block" class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px;margin-top:8px;display:none">
+    <div>
+      <div class="settings-label">Clave API de Gemini (Google)</div>
+      <div class="settings-sub">aistudio.google.com · Capa gratuita generosa disponible</div>
+    </div>
+    <div id="gemini-key-display" class="key-preview">No configurada</div>
+    <div style="display:flex;gap:8px;width:100%">
+      <button class="btn-secondary" style="flex:1;padding:10px" onclick="openGeminiKeyModal()">Configurar clave</button>
+      <button class="btn-danger" onclick="clearGeminiKey()">Borrar</button>
     </div>
   </div>
 
@@ -538,6 +568,26 @@ button:active{transform:scale(0.97)}
   </div>
 </div>
 
+<!-- Gemini Key Modal -->
+<div class="modal-bg" id="modal-gemini-key">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✨ Clave API de Gemini</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6">
+      Gemini Flash tiene capa gratuita generosa (15 peticiones/min, sin tarjeta).<br>
+      Obtén tu clave en <strong style="color:var(--accent)">aistudio.google.com</strong> → Get API Key.
+    </p>
+    <div class="form-group" style="margin-left:0;margin-right:0">
+      <input type="password" id="gemini-key-input" class="form-input" placeholder="AIzaSy...">
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-bottom:16px">La clave se guarda solo en tu dispositivo.</p>
+    <div style="display:flex;gap:10px">
+      <button class="btn-secondary" style="flex:1" onclick="closeModal('modal-gemini-key')">Cancelar</button>
+      <button class="btn-primary" style="flex:2" onclick="saveGeminiKey()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Book Menu Modal -->
 <div class="modal-bg" id="modal-book-menu">
   <div class="modal-sheet">
@@ -583,6 +633,8 @@ button:active{transform:scale(0.97)}
 
 const STORAGE_KEY = 'bookmarked_data';
 const API_KEY_STORAGE = 'bookmarked_api_key';
+const GEMINI_KEY_STORAGE = 'bookmarked_gemini_key';
+const PROVIDER_STORAGE = 'bookmarked_provider';
 
 const BOOK_COLORS = ['#e8ff00','#ff9900','#ff4d6d','#4cc9f0','#7bff7b','#c77dff','#ff6b6b','#48cae4'];
 const BOOK_EMOJIS = ['📗','📘','📙','📕','📓','📒','📔','📚'];
@@ -597,6 +649,7 @@ let extractedPhrases = [];
 let sumSelectedBookId = null;
 let sumSelectedScope = 'all';
 let addFromBookId = null;
+let currentProvider = 'claude';
 
 // ============================================================
 // INIT
@@ -604,6 +657,7 @@ let addFromBookId = null;
 function init() {
   loadData();
   buildColorRows();
+  currentProvider = localStorage.getItem(PROVIDER_STORAGE) || 'claude';
   updateApiKeyDisplay();
   renderLibrary();
   renderSumBookSelect();
@@ -985,10 +1039,129 @@ function onChapterSelectChange() {
   document.getElementById('new-chapter-fields').style.display = isNew ? 'block' : 'none';
 }
 
+// ============================================================
+// AI API ABSTRACTION (Claude & Gemini)
+// ============================================================
+const VISION_PROMPT = `Analiza esta imagen de una página de libro.
+
+Tu tarea: identificar y extraer ÚNICAMENTE las frases, oraciones o palabras que están marcadas/subrayadas con marcador fluorescente (resaltador), bolígrafo, o cualquier otra marca visual destacada.
+
+Instrucciones:
+- Lista SOLO el texto marcado/subrayado, nada más
+- Una frase por línea
+- No incluyas texto sin marcar
+- No añadas numeración, viñetas, comillas, ni explicaciones
+- Si no hay texto marcado visible, responde exactamente: SIN_FRASES
+- Mantén el texto exactamente como aparece en la imagen (mismo idioma, misma puntuación)
+
+Responde solo con las frases, una por línea.`;
+
+async function callVisionAPI(base64, mediaType, prompt) {
+  if (currentProvider === 'gemini') {
+    const key = localStorage.getItem(GEMINI_KEY_STORAGE);
+    if (!key) throw new Error('no_key_gemini');
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [
+            { inline_data: { mime_type: mediaType, data: base64 } },
+            { text: prompt }
+          ]}]
+        })
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Gemini HTTP ${res.status}`);
+    }
+    const r = await res.json();
+    return r.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  } else {
+    const key = localStorage.getItem(API_KEY_STORAGE);
+    if (!key) throw new Error('no_key_claude');
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-8',
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+          { type: 'text', text: prompt }
+        ]}]
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Claude HTTP ${res.status}`);
+    }
+    const r = await res.json();
+    return r.content?.[0]?.text || '';
+  }
+}
+
+async function callTextAPI(prompt) {
+  if (currentProvider === 'gemini') {
+    const key = localStorage.getItem(GEMINI_KEY_STORAGE);
+    if (!key) throw new Error('no_key_gemini');
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Gemini HTTP ${res.status}`);
+    }
+    const r = await res.json();
+    return r.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  } else {
+    const key = localStorage.getItem(API_KEY_STORAGE);
+    if (!key) throw new Error('no_key_claude');
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-8',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Claude HTTP ${res.status}`);
+    }
+    const r = await res.json();
+    return r.content?.[0]?.text || '';
+  }
+}
+
+function checkApiKey() {
+  if (currentProvider === 'gemini') {
+    return !!localStorage.getItem(GEMINI_KEY_STORAGE);
+  }
+  return !!localStorage.getItem(API_KEY_STORAGE);
+}
+
 async function analyzePhoto() {
-  const apiKey = localStorage.getItem(API_KEY_STORAGE);
-  if (!apiKey) {
-    showToast('Configura tu clave API primero', 'error');
+  if (!checkApiKey()) {
+    showToast(`Configura tu clave de ${currentProvider === 'gemini' ? 'Gemini' : 'Claude'} primero`, 'error');
     navigate('settings');
     return;
   }
@@ -1014,58 +1187,13 @@ async function analyzePhoto() {
     chapterId = createChapter(bookId, name);
   }
 
-  showSpinner('Analizando imagen con IA...');
+  const provName = currentProvider === 'gemini' ? 'Gemini' : 'Claude';
+  showSpinner(`Analizando con ${provName}...`);
 
   try {
     const base64 = photoDataUrl.split(',')[1];
     const mediaType = photoDataUrl.split(';')[0].split(':')[1];
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-8',
-        max_tokens: 2048,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: mediaType, data: base64 }
-            },
-            {
-              type: 'text',
-              text: `Analiza esta imagen de una página de libro.
-
-Tu tarea: identificar y extraer ÚNICAMENTE las frases, oraciones o palabras que están marcadas/subrayadas con marcador fluorescente (resaltador), bolígrafo, o cualquier otra marca visual destacada.
-
-Instrucciones:
-- Lista SOLO el texto marcado/subrayado, nada más
-- Una frase por línea
-- No incluyas texto sin marcar
-- No añadas numeración, viñetas, comillas, ni explicaciones
-- Si no hay texto marcado visible, responde exactamente: SIN_FRASES
-- Mantén el texto exactamente como aparece en la imagen (mismo idioma, misma puntuación)
-
-Responde solo con las frases, una por línea.`
-            }
-          ]
-        }]
-      })
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error?.message || `Error HTTP ${response.status}`);
-    }
-
-    const result = await response.json();
-    const rawText = result.content[0]?.text || '';
+    const rawText = await callVisionAPI(base64, mediaType, VISION_PROMPT);
 
     if (rawText.trim() === 'SIN_FRASES') {
       hideSpinner();
@@ -1092,7 +1220,9 @@ Responde solo con las frases, una por línea.`
 
   } catch(e) {
     hideSpinner();
-    showToast('Error: ' + e.message, 'error');
+    if (e.message === 'no_key_gemini') { showToast('Configura tu clave de Gemini en Ajustes', 'error'); navigate('settings'); }
+    else if (e.message === 'no_key_claude') { showToast('Configura tu clave de Claude en Ajustes', 'error'); navigate('settings'); }
+    else showToast('Error: ' + e.message, 'error');
   }
 }
 
@@ -1214,8 +1344,7 @@ function selectSumScope(scope, el) {
 }
 
 async function generateSummary() {
-  const apiKey = localStorage.getItem(API_KEY_STORAGE);
-  if (!apiKey) { showToast('Configura tu clave API primero', 'error'); navigate('settings'); return; }
+  if (!checkApiKey()) { showToast(`Configura tu clave de ${currentProvider === 'gemini' ? 'Gemini' : 'Claude'} primero`, 'error'); navigate('settings'); return; }
   if (!sumSelectedBookId) { showToast('Selecciona un libro', 'error'); return; }
 
   const book = data.books[sumSelectedBookId];
@@ -1237,24 +1366,7 @@ async function generateSummary() {
     : `el capítulo "${book.chapters[sumSelectedScope]?.name}" de "${book.title}"`;
 
   const phraseList = phrases.map(p => `• [${p.chapter}] ${p.text}`).join('\n');
-
-  showSpinner('Generando resumen con IA...');
-
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-8',
-        max_tokens: 1024,
-        messages: [{
-          role: 'user',
-          content: `Estas son las frases que el lector subrayó de ${scope}:
+  const summaryPrompt = `Estas son las frases que el lector subrayó de ${scope}:
 
 ${phraseList}
 
@@ -1265,18 +1377,13 @@ Por favor, genera un resumen coherente y reflexivo que:
 4. Sea de 200-350 palabras
 5. Esté en el mismo idioma que las frases
 
-Responde solo con el resumen, sin títulos ni introducción.`
-        }]
-      })
-    });
+Responde solo con el resumen, sin títulos ni introducción.`;
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error?.message || `Error HTTP ${response.status}`);
-    }
+  const provName = currentProvider === 'gemini' ? 'Gemini' : 'Claude';
+  showSpinner(`Generando resumen con ${provName}...`);
 
-    const result = await response.json();
-    const summary = result.content[0]?.text || '';
+  try {
+    const summary = await callTextAPI(summaryPrompt);
     hideSpinner();
 
     document.getElementById('summary-content').textContent = summary;
@@ -1293,7 +1400,9 @@ Responde solo con el resumen, sin títulos ni introducción.`
 
   } catch(e) {
     hideSpinner();
-    showToast('Error: ' + e.message, 'error');
+    if (e.message === 'no_key_gemini') { showToast('Configura tu clave de Gemini en Ajustes', 'error'); navigate('settings'); }
+    else if (e.message === 'no_key_claude') { showToast('Configura tu clave de Claude en Ajustes', 'error'); navigate('settings'); }
+    else showToast('Error: ' + e.message, 'error');
   }
 }
 
@@ -1305,9 +1414,59 @@ function copySummary() {
 // ============================================================
 // SETTINGS
 // ============================================================
+function setProvider(p) {
+  currentProvider = p;
+  localStorage.setItem(PROVIDER_STORAGE, p);
+  updateApiKeyDisplay();
+}
+
+function updateApiKeyDisplay() {
+  // Provider buttons
+  const isGemini = currentProvider === 'gemini';
+  const btnC = document.getElementById('prov-btn-claude');
+  const btnG = document.getElementById('prov-btn-gemini');
+  if (btnC) {
+    btnC.style.background = isGemini ? 'transparent' : 'var(--accent)';
+    btnC.style.color = isGemini ? 'var(--muted)' : '#000';
+  }
+  if (btnG) {
+    btnG.style.background = isGemini ? 'var(--accent)' : 'transparent';
+    btnG.style.color = isGemini ? '#000' : 'var(--muted)';
+  }
+
+  // Notes
+  const noteEl = document.getElementById('provider-note');
+  if (noteEl) {
+    noteEl.textContent = isGemini
+      ? '✨ Gemini 2.0 Flash — capa gratuita generosa (15 peticiones/min sin tarjeta). Ideal para empezar.'
+      : '🧠 Claude Opus — mayor precisión en extracción de texto subrayado. $5 de crédito gratis al registrarse.';
+  }
+
+  // Show/hide blocks
+  const cb = document.getElementById('claude-key-block');
+  const gb = document.getElementById('gemini-key-block');
+  if (cb) cb.style.display = isGemini ? 'none' : 'flex';
+  if (gb) gb.style.display = isGemini ? 'flex' : 'none';
+
+  // Claude key display
+  const key = localStorage.getItem(API_KEY_STORAGE);
+  const el = document.getElementById('api-key-display');
+  if (el) {
+    if (key) { el.textContent = key.slice(0,8) + '••••••••' + key.slice(-4); el.style.color = 'var(--accent)'; }
+    else { el.textContent = 'No configurada'; el.style.color = 'var(--muted)'; }
+  }
+
+  // Gemini key display
+  const gkey = localStorage.getItem(GEMINI_KEY_STORAGE);
+  const gel = document.getElementById('gemini-key-display');
+  if (gel) {
+    if (gkey) { gel.textContent = gkey.slice(0,8) + '••••••••' + gkey.slice(-4); gel.style.color = 'var(--accent)'; }
+    else { gel.textContent = 'No configurada'; gel.style.color = 'var(--muted)'; }
+  }
+}
+
 function openApiKeyModal() {
-  const existing = localStorage.getItem(API_KEY_STORAGE) || '';
-  document.getElementById('api-key-input').value = existing;
+  document.getElementById('api-key-input').value = localStorage.getItem(API_KEY_STORAGE) || '';
   openModal('modal-api-key');
 }
 
@@ -1317,26 +1476,35 @@ function saveApiKey() {
   localStorage.setItem(API_KEY_STORAGE, key);
   closeModal('modal-api-key');
   updateApiKeyDisplay();
-  showToast('Clave guardada', 'success');
+  showToast('Clave de Claude guardada', 'success');
 }
 
 function clearApiKey() {
-  if (!confirm('¿Borrar la clave API?')) return;
+  if (!confirm('¿Borrar la clave de Claude?')) return;
   localStorage.removeItem(API_KEY_STORAGE);
   updateApiKeyDisplay();
   showToast('Clave eliminada', 'success');
 }
 
-function updateApiKeyDisplay() {
-  const key = localStorage.getItem(API_KEY_STORAGE);
-  const el = document.getElementById('api-key-display');
-  if (key) {
-    el.textContent = key.slice(0,8) + '••••••••' + key.slice(-4);
-    el.style.color = 'var(--accent)';
-  } else {
-    el.textContent = 'No configurada';
-    el.style.color = 'var(--muted)';
-  }
+function openGeminiKeyModal() {
+  document.getElementById('gemini-key-input').value = localStorage.getItem(GEMINI_KEY_STORAGE) || '';
+  openModal('modal-gemini-key');
+}
+
+function saveGeminiKey() {
+  const key = document.getElementById('gemini-key-input').value.trim();
+  if (!key.startsWith('AIza')) { showToast('Clave inválida (debe empezar con AIza)', 'error'); return; }
+  localStorage.setItem(GEMINI_KEY_STORAGE, key);
+  closeModal('modal-gemini-key');
+  updateApiKeyDisplay();
+  showToast('Clave de Gemini guardada', 'success');
+}
+
+function clearGeminiKey() {
+  if (!confirm('¿Borrar la clave de Gemini?')) return;
+  localStorage.removeItem(GEMINI_KEY_STORAGE);
+  updateApiKeyDisplay();
+  showToast('Clave eliminada', 'success');
 }
 
 function exportData() {
