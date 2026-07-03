@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="build-version" content="2026-07-02-03">
+<meta name="build-version" content="2026-07-03-01">
 <title>Vincent Forge — Training Log</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -2938,12 +2938,21 @@ function changeMode() {
     const yd = getCurrentYearData();
     const wd = yd.weeksData[state.currentWeek];
     if (Array.isArray(wd) && wd.length) {
+      // Snapshot before touching anything, regardless of which path below
+      // runs, so ↩ RECUPERAR can always restore the pre-switch state.
+      pushToClearTrash('modeswitch', { weeksData: { [state.currentWeek]: JSON.parse(JSON.stringify(wd)) } });
       const { byDay, unmatched } = classifyExercisesByRoutine(wd);
       if (unmatched.length) {
         openAssignDaysModal(byDay, unmatched);
         return; // mode switch finishes when the user saves the modal
       }
       yd.weeksData[state.currentWeek] = byDay;
+    }
+  } else if (newMode === 'week' && state.mode === 'day') {
+    const yd = getCurrentYearData();
+    const wd = yd.weeksData[state.currentWeek];
+    if (wd && !Array.isArray(wd) && Object.keys(wd).length) {
+      pushToClearTrash('modeswitch', { weeksData: { [state.currentWeek]: JSON.parse(JSON.stringify(wd)) } });
     }
   }
   state.mode = newMode;
@@ -3108,8 +3117,11 @@ function getWeekStartOf(dateObj) {
   return d;
 }
 function getWeekDate(weekNum) {
+  // Always computed fresh — the field that used to let users hand-override
+  // this (yd.weekDates[weekNum]) is read-only now, and honoring old stored
+  // overrides here was showing stale/wrong dates for anyone who'd set one
+  // before that field became read-only.
   const yd = getCurrentYearData();
-  if (yd.weekDates[weekNum]) return yd.weekDates[weekNum];
   const rawStart = new Date(yd.yearStart + 'T00:00:00');
   const weekStartAligned = getWeekStartOf(rawStart);
   const d = new Date(weekStartAligned);
@@ -3340,11 +3352,16 @@ function getWeekExercises() {
     return yd.weeksData[state.currentWeek][state.currentDay];
   } else {
     if (!Array.isArray(yd.weeksData[state.currentWeek])) {
-      // if switching from day mode, flatten into week array as fallback
+      // if switching from day mode, flatten into week array as fallback —
+      // walk days in calendar order (Domingo..Sábado + custom), not object
+      // key insertion order, so exercises stack in the order they happened.
       const dayData = yd.weeksData[state.currentWeek];
       let flat = [];
       if (dayData && typeof dayData === 'object') {
-        Object.values(dayData).forEach(arr => { if (Array.isArray(arr)) flat = flat.concat(arr); });
+        getAllDays().forEach(d => { if (Array.isArray(dayData[d])) flat = flat.concat(dayData[d]); });
+        Object.keys(dayData).forEach(d => {
+          if (!getAllDays().includes(d) && Array.isArray(dayData[d])) flat = flat.concat(dayData[d]);
+        });
       }
       yd.weeksData[state.currentWeek] = flat;
     }
@@ -4389,8 +4406,15 @@ function applyRoutine(name) {
     r.exercises.forEach(t => { exercises.push(buildExerciseFromTemplate(t)); addedCount++; });
     yd.routineSource[state.currentWeek] = name;
   } else {
-    if (!yd.weeksData[state.currentWeek] || Array.isArray(yd.weeksData[state.currentWeek])) {
+    if (!yd.weeksData[state.currentWeek]) {
       yd.weeksData[state.currentWeek] = {};
+    } else if (Array.isArray(yd.weeksData[state.currentWeek])) {
+      // Never silently discard "por semana" data just because a day-type
+      // routine is being applied — snapshot it for undo and keep it under
+      // the current day instead of wiping it.
+      const existing = yd.weeksData[state.currentWeek];
+      pushToClearTrash('modeswitch', { weeksData: { [state.currentWeek]: JSON.parse(JSON.stringify(existing)) } });
+      yd.weeksData[state.currentWeek] = existing.length ? { [state.currentDay || DAYS_DEFAULT[0]]: existing } : {};
     }
     if (!yd.routineSource[state.currentWeek]) yd.routineSource[state.currentWeek] = {};
     Object.keys(r.days).forEach(dayName => {
@@ -4946,6 +4970,21 @@ function undoLastClear() {
       if (last.snapshot.weeksData[w] !== null) yd.weeksData[w] = last.snapshot.weeksData[w];
       else delete yd.weeksData[w];
     });
+    // A 'modeswitch' snapshot restores data shaped for whichever mode it was
+    // taken in (array = por semana, day-keyed object = por día). getWeekExercises()
+    // auto-converts on the next read to match state.mode, which would otherwise
+    // immediately re-flatten/re-split the data we just restored — so re-sync
+    // the mode picker to match the shape actually being restored.
+    if (last.scope === 'modeswitch' && Number(last.week) === state.currentWeek) {
+      const restored = yd.weeksData[state.currentWeek];
+      const restoredMode = Array.isArray(restored) ? 'week' : 'day';
+      if (state.mode !== restoredMode) {
+        state.mode = restoredMode;
+        document.getElementById('modePicker').value = restoredMode;
+        document.getElementById('dayPickerWrap').style.display = restoredMode === 'day' ? 'flex' : 'none';
+        if (restoredMode === 'day') populateDayPicker();
+      }
+    }
   }
   if (last.snapshot.bodyMetrics) yd.bodyMetrics = last.snapshot.bodyMetrics;
   if (clearTrash.length === 0) document.getElementById('undoClearBtn').style.display = 'none';
@@ -6220,8 +6259,20 @@ function checkForNewVersion() {
     })
     .catch(() => {});
 }
+let lastKnownLocalDate = toLocalISODate(new Date());
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') checkForNewVersion();
+  if (document.visibilityState !== 'visible') return;
+  checkForNewVersion();
+  // If the calendar day actually changed while the app sat open/backgrounded
+  // (e.g. left open overnight), the Home greeting date would otherwise stay
+  // frozen on whatever day it was last rendered.
+  const nowDate = toLocalISODate(new Date());
+  if (nowDate !== lastKnownLocalDate) {
+    lastKnownLocalDate = nowDate;
+    if (state.currentUser && document.getElementById('page-home')?.style.display !== 'none') {
+      renderHome();
+    }
+  }
 });
 
 function positionP1Hotspot() {
