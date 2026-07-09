@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="build-version" content="2026-07-03-02">
+<meta name="build-version" content="2026-07-09-01">
 <title>Vincent Forge — Training Log</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -4540,24 +4540,20 @@ function updateRoutineWithCurrent() {
     showToast("'" + source + "' es una rutina predeterminada y no se puede modificar"); return;
   }
   const routine = state.routines[source];
-  const currentExercises = getWeekExercises();
-  const existingNames = new Set(
-    state.mode === 'day'
-      ? (routine.days[state.currentDay] || []).map(e => e.name)
-      : (routine.exercises || []).map(e => e.name)
-  );
-  const newOnes = currentExercises.filter(ex => !existingNames.has(ex.name));
-  if (!newOnes.length) { showToast("Sin ejercicios nuevos — la rutina ya está al día"); return; }
-  const newTemplates = newOnes.map(toTemplate);
+  // Replace the routine's exercise list with exactly what's currently on screen
+  // (not just append) so deleting an exercise here also removes it from the
+  // routine — previously this only ever added new names and never dropped ones.
+  const currentExercises = dedupeExercises(getWeekExercises());
+  if (!currentExercises.length) { showToast("No hay ejercicios aquí para actualizar la rutina"); return; }
+  const newTemplates = currentExercises.map(toTemplate);
   if (state.mode === 'day') {
-    if (!routine.days[state.currentDay]) routine.days[state.currentDay] = [];
-    routine.days[state.currentDay].push(...newTemplates);
+    if (!routine.days) routine.days = {};
+    routine.days[state.currentDay] = newTemplates;
   } else {
-    if (!routine.exercises) routine.exercises = [];
-    routine.exercises.push(...newTemplates);
+    routine.exercises = newTemplates;
   }
   saveState(); renderRoutinesList();
-  showToast("+" + newOnes.length + " ejercicio(s) añadido(s) a '" + source + "'");
+  showToast("Rutina '" + source + "' actualizada — " + newTemplates.length + " ejercicios");
 }
 
 function addSet(exIdx) {
@@ -6247,19 +6243,33 @@ function checkForNewVersion() {
     .catch(() => {});
 }
 let lastKnownLocalDate = toLocalISODate(new Date());
+function resyncStaleDateState() {
+  // A standalone home-screen app (iOS "Add to Home Screen") is usually just
+  // suspended in the background rather than reloaded — DOMContentLoaded
+  // never fires again, so enterApp()'s syncCurrentDayToToday() never reruns
+  // either. Without this, state.currentWeek/currentDay stay frozen at
+  // whatever they were during the last live session (e.g. stuck on an old
+  // "week 2") no matter how many real days actually pass. Re-sync whenever
+  // we detect the calendar day genuinely moved forward while backgrounded.
+  const nowDate = toLocalISODate(new Date());
+  if (nowDate === lastKnownLocalDate) return;
+  lastKnownLocalDate = nowDate;
+  if (!state.currentUser) return;
+  syncCurrentDayToToday();
+  if (document.getElementById('page-home')?.style.display !== 'none') renderHome();
+  if (document.getElementById('page-registrar')?.style.display !== 'none') { renderWeekDate(); renderExercises(); }
+}
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   checkForNewVersion();
-  // If the calendar day actually changed while the app sat open/backgrounded
-  // (e.g. left open overnight), the Home greeting date would otherwise stay
-  // frozen on whatever day it was last rendered.
-  const nowDate = toLocalISODate(new Date());
-  if (nowDate !== lastKnownLocalDate) {
-    lastKnownLocalDate = nowDate;
-    if (state.currentUser && document.getElementById('page-home')?.style.display !== 'none') {
-      renderHome();
-    }
-  }
+  resyncStaleDateState();
+});
+// Belt-and-suspenders for browsers that restore the page from bfcache
+// (event.persisted) instead of firing a fresh load or even visibilitychange.
+window.addEventListener('pageshow', (e) => {
+  if (!e.persisted) return;
+  checkForNewVersion();
+  resyncStaleDateState();
 });
 
 function positionP1Hotspot() {
