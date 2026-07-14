@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="build-version" content="2026-07-10-01">
+<meta name="build-version" content="2026-07-10-02">
 <title>Vincent Forge — Training Log</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -1579,6 +1579,7 @@
 
     <!-- ============ PAGE: PERFIL ============ -->
     <div id="page-perfil" class="app-page" style="display:none;">
+      <div class="small-note" style="text-align:right;opacity:.6;padding:4px 2px 0;">Versión <span id="appBuildVersionLabel">—</span></div>
       <div class="profile-header-card">
         <img class="profile-header-photo" src="" id="profileHeaderPhoto" alt="">
         <div class="profile-header-brand">VINCENT GYM <span style="color:var(--text);opacity:.7;">by RIGHTMAN</span></div>
@@ -1833,7 +1834,6 @@
         <button onclick="saveSettings()">GUARDAR CAMBIOS</button>
         <button onclick="doLogout()" style="background:transparent;border:1px solid #D81F2A;color:#D81F2A;margin-left:10px;">SALIR DE LA CUENTA</button>
       </div>
-      <div class="small-note" style="text-align:center;margin-top:14px;opacity:.5;">Versión <span id="appBuildVersionLabel">—</span></div>
     </div>
 
   </div>
@@ -2004,7 +2004,7 @@
 
 <div id="updateBanner">
   <span>Hay una versión nueva disponible.</span>
-  <button onclick="location.reload()">ACTUALIZAR</button>
+  <button onclick="forceFreshReload()">ACTUALIZAR</button>
 </div>
 
 <script>
@@ -6316,6 +6316,14 @@ window.addEventListener('DOMContentLoaded', async () => {
    This re-fetches the live page (bypassing cache) and compares its
    build-version meta tag against ours; if it differs, prompt to reload
    instead of silently staying on a stale version. */
+function forceFreshReload() {
+  // location.reload() alone can still be served straight from Safari's own
+  // HTTP cache (it honors the page's normal Cache-Control, unlike the
+  // no-store fetch above) — so tapping ACTUALIZAR could silently reload the
+  // exact same stale bytes. Navigating to a URL with a fresh cache-busting
+  // query string forces a real network fetch past every cache layer.
+  location.href = location.href.split('#')[0].split('?')[0] + '?_v=' + Date.now();
+}
 function checkForNewVersion() {
   const myVersion = document.querySelector('meta[name="build-version"]')?.content;
   if (!myVersion) return;
