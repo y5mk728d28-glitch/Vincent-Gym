@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="theme-color" content="#04070d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AutoVentas">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%2304070d'/%3E%3Ctext x='50' y='64' font-size='52' text-anchor='middle'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
+<title>AutoVentas — Registro de Ventas</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#04070d;
+  --bg-glow: radial-gradient(ellipse 120% 60% at 50% -10%, rgba(37,99,235,0.22), transparent 60%);
+  --surface:#0a1120;
+  --card:#0e1526;
+  --card-hover:#121b32;
+  --border: rgba(96,165,250,0.14);
+  --border-strong: rgba(96,165,250,0.32);
+  --accent:#3b82f6;
+  --accent2:#60a5fa;
+  --accent-dim:#1d4ed8;
+  --accent-soft: rgba(59,130,246,0.14);
+  --text:#f4f7ff;
+  --muted:#8ea0c7;
+  --muted-dim:#5a6a8a;
+  --good:#22c55e;
+  --good-soft: rgba(34,197,94,0.14);
+  --warn:#f59e0b;
+  --warn-soft: rgba(245,158,11,0.14);
+  --danger:#ef4444;
+  --danger-soft: rgba(239,68,68,0.14);
+  --radius-sm:10px; --radius-md:16px; --radius-lg:22px;
+  --shadow-md: 0 10px 30px rgba(0,0,0,.55);
+  --ease: cubic-bezier(0.4,0,0.2,1);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;}
+body{background:var(--bg) var(--bg-glow) no-repeat;min-height:100vh;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:110px;}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;transition:all .18s var(--ease);}
+input,select,textarea{font-family:inherit;outline:none;color:var(--text);}
+button:active{transform:scale(0.96);}
+.mono{font-family:'DM Mono',monospace;}
+h1,h2,.display{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;}
+
+/* ===== TOPBAR ===== */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 18px 8px;}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand-mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(145deg,var(--accent),var(--accent-dim));display:flex;align-items:center;justify-content:center;font-size:19px;box-shadow:0 4px 16px rgba(59,130,246,.35);}
+.brand-name{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:.04em;}
+.bell-btn{position:relative;width:42px;height:42px;border-radius:50%;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;}
+.bell-badge{position:absolute;top:-2px;right:-2px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--bg);}
+
+/* ===== DASHBOARD ===== */
+.dashboard{padding:10px 18px 6px;}
+.date-card{background:linear-gradient(135deg,var(--card),var(--surface));border:1px solid var(--border-strong);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:12px;box-shadow:var(--shadow-md);position:relative;overflow:hidden;}
+.date-card::after{content:'';position:absolute;right:-30px;top:-30px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,.25),transparent 70%);}
+.date-label{font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--accent2);font-weight:600;margin-bottom:4px;}
+.date-value{font-size:21px;font-weight:600;text-transform:capitalize;}
+.stats-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px 8px;text-align:center;}
+.stat-card.good{border-color:rgba(34,197,94,.3);}
+.stat-card.warn{border-color:rgba(245,158,11,.3);}
+.stat-icon{font-size:17px;margin-bottom:4px;}
+.stat-value{font-family:'Bebas Neue',sans-serif;font-size:28px;line-height:1;}
+.stat-card.good .stat-value{color:var(--good);}
+.stat-card.warn .stat-value{color:var(--warn);}
+.stat-label{font-size:10.5px;color:var(--muted);margin-top:4px;letter-spacing:.02em;}
+
+/* ===== TOOLBAR ===== */
+.toolbar{padding:8px 18px;display:flex;flex-direction:column;gap:10px;}
+.search-input{width:100%;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 14px;font-size:14px;color:var(--text);}
+.search-input::placeholder{color:var(--muted-dim);}
+.filter-chips{display:flex;gap:8px;}
+.chip{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:7px 14px;font-size:12.5px;color:var(--muted);font-weight:500;}
+.chip.active{background:var(--accent-soft);border-color:var(--border-strong);color:var(--accent2);}
+
+/* ===== SALES LIST ===== */
+.sales-list{padding:6px 18px 18px;display:flex;flex-direction:column;gap:10px;}
+.sale-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px 16px;}
+.sale-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.sale-client{font-size:16px;font-weight:700;}
+.sale-car{font-size:12.5px;color:var(--accent2);margin-top:2px;}
+.status-badge{font-size:10.5px;font-weight:700;padding:5px 10px;border-radius:20px;white-space:nowrap;letter-spacing:.02em;}
+.status-badge.cashed{background:var(--good-soft);color:var(--good);}
+.status-badge.pending{background:var(--warn-soft);color:var(--warn);}
+.sale-meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;font-size:12px;color:var(--muted);}
+.sale-meta-item{display:flex;align-items:center;gap:5px;}
+.sale-notes{margin-top:8px;font-size:12.5px;color:var(--muted-dim);font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sale-actions{display:flex;gap:8px;margin-top:12px;border-top:1px solid var(--border);padding-top:10px;}
+.mini-btn{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:5px;color:var(--muted);}
+.mini-btn.primary{color:var(--accent2);}
+.mini-btn.danger{color:var(--danger);}
+
+.empty-state{padding:60px 30px;text-align:center;color:var(--muted-dim);}
+.empty-state .icon{font-size:42px;margin-bottom:10px;}
+
+/* ===== FAB ===== */
+.fab{position:fixed;right:20px;bottom:26px;width:58px;height:58px;border-radius:50%;background:linear-gradient(145deg,var(--accent),var(--accent-dim));display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff;box-shadow:0 10px 26px rgba(59,130,246,.45);z-index:50;}
+
+/* ===== MODALS ===== */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .22s var(--ease);z-index:200;}
+.modal-overlay.show{opacity:1;pointer-events:auto;}
+.modal{background:var(--surface);border:1px solid var(--border-strong);border-top-left-radius:24px;border-top-right-radius:24px;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;transform:translateY(30px);transition:transform .25s var(--ease);padding-bottom:env(safe-area-inset-bottom);}
+.modal-overlay.show .modal{transform:translateY(0);}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:2;}
+.modal-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:.03em;}
+.modal-close{width:32px;height:32px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--muted);}
+.modal-body{padding:18px 20px;}
+.form-group{margin-bottom:14px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.form-label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;}
+.form-input,.form-textarea{width:100%;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 12px;font-size:14px;color:var(--text);}
+.form-input:focus,.form-textarea:focus{border-color:var(--border-strong);}
+.form-textarea{min-height:70px;resize:vertical;}
+.section-divider{display:flex;align-items:center;gap:8px;margin:20px 0 12px;color:var(--accent2);font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;}
+.section-divider::after{content:'';flex:1;height:1px;background:var(--border);}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;}
+.toggle-row .form-label{margin:0;text-transform:none;font-size:14px;color:var(--text);font-weight:500;}
+.switch{position:relative;width:46px;height:26px;border-radius:14px;background:var(--card-hover);border:1px solid var(--border);flex-shrink:0;}
+.switch.on{background:var(--good);border-color:var(--good);}
+.switch::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .18s var(--ease);}
+.switch.on::after{transform:translateX(20px);}
+.important-date-row{display:flex;gap:8px;margin-bottom:8px;align-items:center;}
+.important-date-row .form-input{flex:1;}
+.remove-date-btn{width:34px;height:34px;flex-shrink:0;border-radius:var(--radius-sm);background:var(--danger-soft);color:var(--danger);display:flex;align-items:center;justify-content:center;font-size:14px;}
+.add-date-btn{width:100%;padding:10px;border:1px dashed var(--border-strong);border-radius:var(--radius-sm);color:var(--accent2);font-size:13px;font-weight:600;}
+.modal-footer{display:flex;gap:10px;padding:16px 20px 20px;position:sticky;bottom:0;background:var(--surface);}
+.btn{flex:1;padding:13px;border-radius:var(--radius-sm);font-size:14px;font-weight:700;text-align:center;}
+.btn-primary{background:linear-gradient(145deg,var(--accent),var(--accent-dim));color:#fff;}
+.btn-secondary{background:var(--card);color:var(--muted);border:1px solid var(--border);}
+.btn-danger{background:var(--danger-soft);color:var(--danger);}
+
+/* ===== ALERTS ===== */
+.alert-section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:16px 0 8px;}
+.alert-section-title:first-child{margin-top:0;}
+.alert-item{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 13px;margin-bottom:8px;}
+.alert-item .a-icon{font-size:20px;flex-shrink:0;}
+.alert-item .a-text{flex:1;min-width:0;}
+.alert-item .a-title{font-size:13.5px;font-weight:600;}
+.alert-item .a-sub{font-size:11.5px;color:var(--muted);margin-top:1px;}
+.alert-item.today{border-color:var(--border-strong);background:var(--accent-soft);}
+.alert-item.check{border-color:rgba(245,158,11,.3);background:var(--warn-soft);}
+.notif-status{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;}
+.notif-status .txt{font-size:13px;color:var(--muted);}
+.small-btn{background:var(--accent-soft);color:var(--accent2);padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;}
+
+/* ===== TOAST ===== */
+.toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);background:#151f38;border:1px solid var(--border-strong);color:var(--text);padding:12px 18px;border-radius:30px;font-size:13px;font-weight:500;box-shadow:var(--shadow-md);opacity:0;pointer-events:none;transition:all .25s var(--ease);z-index:400;max-width:88vw;text-align:center;}
+.toast.show{opacity:1;transform:translate(-50%,0);}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">🚗</span><span class="brand-name">AutoVentas</span></div>
+    <div style="display:flex;gap:8px;">
+      <button class="bell-btn" onclick="openSettingsPanel()">⚙️</button>
+      <button class="bell-btn" id="bellBtn" onclick="openAlertsPanel()">🔔<span class="bell-badge" id="bellBadge" style="display:none">0</span></button>
+    </div>
+  </header>
+
+  <section class="dashboard">
+    <div class="date-card">
+      <div class="date-label">Hoy</div>
+      <div class="date-value" id="todayDate">—</div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-icon">🚗</div>
+        <div class="stat-value" id="statSold">0</div>
+        <div class="stat-label">Carros vendidos</div>
+      </div>
+      <div class="stat-card good">
+        <div class="stat-icon">✅</div>
+        <div class="stat-value" id="statCashed">0</div>
+        <div class="stat-label">Cheques cobrados</div>
+      </div>
+      <div class="stat-card warn">
+        <div class="stat-icon">⏳</div>
+        <div class="stat-value" id="statPending">0</div>
+        <div class="stat-label">Cheques pendientes</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="toolbar">
+    <input class="search-input" id="searchInput" placeholder="🔍 Buscar cliente, carro, dealer #..." oninput="renderSales()">
+    <div class="filter-chips">
+      <button class="chip active" data-filter="all" onclick="setFilter('all')">Todas</button>
+      <button class="chip" data-filter="pending" onclick="setFilter('pending')">Pendientes</button>
+      <button class="chip" data-filter="cashed" onclick="setFilter('cashed')">Cobrados</button>
+    </div>
+  </section>
+
+  <section class="sales-list" id="salesList"></section>
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div class="icon">🚗</div>
+    <div>Aún no has registrado ninguna venta.</div>
+    <div style="margin-top:4px;font-size:12.5px;">Toca el botón + para agregar la primera.</div>
+  </div>
+</div>
+
+<button class="fab" onclick="openSaleModal()">+</button>
+
+<!-- Sale add/edit modal -->
+<div class="modal-overlay" id="saleModalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="saleModalTitle">Nueva Venta</div>
+      <button class="modal-close" onclick="closeSaleModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Nombre del cliente</label>
+        <input class="form-input" id="f_clientName" placeholder="Ej. Juan Pérez">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Teléfono del cliente</label>
+          <input class="form-input" id="f_phone" placeholder="(555) 123-4567">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Número de dealer</label>
+          <input class="form-input" id="f_dealerNumber" placeholder="Ej. D-4821">
+        </div>
+      </div>
+
+      <div class="section-divider">El carro</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Marca</label>
+          <input class="form-input" id="f_brand" placeholder="Ej. Toyota">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Modelo</label>
+          <input class="form-input" id="f_model" placeholder="Ej. Camry">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Color</label>
+        <input class="form-input" id="f_color" placeholder="Ej. Azul">
+      </div>
+
+      <div class="section-divider">Venta y cheque</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Fecha de venta</label>
+          <input class="form-input" type="date" id="f_saleDate">
+        </div>
+        <div class="form-group" id="f_cashedDateWrap" style="display:none">
+          <label class="form-label">Fecha de cobro</label>
+          <input class="form-input" type="date" id="f_cashedDate">
+        </div>
+      </div>
+      <div class="toggle-row">
+        <label class="form-label">¿Cheque cobrado?</label>
+        <div class="switch" id="f_checkSwitch" onclick="toggleCheckedSwitch()"></div>
+      </div>
+
+      <div class="section-divider">Fechas importantes</div>
+      <div class="form-group">
+        <label class="form-label">Cumpleaños del cliente</label>
+        <input class="form-input" type="date" id="f_birthday">
+      </div>
+      <div id="importantDatesList"></div>
+      <button class="add-date-btn" onclick="addImportantDateRow()">+ Agregar otra fecha importante</button>
+
+      <div class="section-divider">Notas</div>
+      <div class="form-group">
+        <textarea class="form-textarea" id="f_notes" placeholder="Notas sobre el cliente o la venta..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeSaleModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveSale()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Alerts modal -->
+<div class="modal-overlay" id="alertsOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Alertas</div>
+      <button class="modal-close" onclick="closeAlertsPanel()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="notif-status">
+        <div class="txt" id="notifStatusText">Notificaciones desactivadas</div>
+        <button class="small-btn" id="notifPermBtn" onclick="requestNotifPermission()">Activar</button>
+      </div>
+      <div id="alertsContent"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div class="modal-overlay" id="settingsOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Ajustes</div>
+      <button class="modal-close" onclick="closeSettingsPanel()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Recordar cheque pendiente después de (días)</label>
+        <input class="form-input" type="number" min="0" id="s_reminderDays">
+      </div>
+      <div class="section-divider">Datos</div>
+      <button class="btn btn-secondary" style="width:100%;margin-bottom:10px;" onclick="exportData()">⬇️ Exportar datos (JSON)</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importData(event)">
+      <button class="btn btn-secondary" style="width:100%;margin-bottom:10px;" onclick="document.getElementById('importFile').click()">⬆️ Importar datos (JSON)</button>
+      <button class="btn btn-danger" style="width:100%;" onclick="confirmClearAll()">🗑️ Borrar todos los datos</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveSettings()">Guardar ajustes</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ STATE & PERSISTENCE ============ */
+const STORAGE_KEY = 'autoventas-state';
+const NOTIFIED_KEY = 'autoventas-notified';
+let state = { sales: [], settings: { checkReminderDays: 3 } };
+let swRegistration = null;
+let currentFilter = 'all';
+let editingSaleId = null;
+let checkedDraft = false;
+let importantDatesDraft = [];
+
+function makeFreshState(){ return { sales: [], settings: { checkReminderDays: 3 } }; }
+
+async function saveState(){
+  let primaryOk = false;
+  try {
+    if (window.storage && window.storage.set) {
+      const result = await window.storage.set(STORAGE_KEY, JSON.stringify(state), false);
+      primaryOk = !!result;
+    }
+  } catch(e) { console.error('Artifact storage save failed', e); }
+  let fallbackOk = false;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); fallbackOk = true; }
+  catch(e) { console.error('localStorage save failed', e); }
+  if (!primaryOk && !fallbackOk) showToast('⚠️ No se pudo guardar — exporta un respaldo en Ajustes');
+}
+
+async function loadState(){
+  state = makeFreshState();
+  try {
+    if (window.storage && window.storage.get) {
+      const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+      const res = await Promise.race([window.storage.get(STORAGE_KEY, false), timeout]);
+      if (res && res.value) { state = Object.assign(state, JSON.parse(res.value)); return; }
+    }
+  } catch(e) { /* fall through to localStorage */ }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) state = Object.assign(state, JSON.parse(raw));
+  } catch(e) { /* keep fresh state */ }
+}
+
+/* ============ DATE UTILS ============ */
+function localDateStr(d){ d = d || new Date(); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0'); return y+'-'+m+'-'+day; }
+function parseDate(s){ if(!s) return null; const parts = s.split('-').map(Number); return new Date(parts[0], parts[1]-1, parts[2]); }
+function todayMidnight(){ const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
+function daysBetween(a,b){ return Math.round((b-a)/86400000); }
+function formatDateEs(s, opts){
+  const d = parseDate(s); if(!d) return '—';
+  const str = d.toLocaleDateString('es-ES', opts || {day:'numeric', month:'short', year:'numeric'});
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+function nextOccurrence(dateStr){
+  const src = parseDate(dateStr);
+  const tm = todayMidnight();
+  let next = new Date(tm.getFullYear(), src.getMonth(), src.getDate());
+  if (daysBetween(tm, next) < 0) next = new Date(tm.getFullYear()+1, src.getMonth(), src.getDate());
+  return { date: next, daysUntil: daysBetween(tm, next), sourceYear: src.getFullYear() };
+}
+
+/* ============ INIT ============ */
+window.addEventListener('DOMContentLoaded', init);
+async function init(){
+  await loadState();
+  if (!state.settings) state.settings = { checkReminderDays: 3 };
+  updateClock();
+  setInterval(updateClock, 60000);
+  renderDashboard();
+  renderSales();
+  registerSW();
+  updateNotifPermissionUI();
+  runNotificationCheck();
+  setInterval(runNotificationCheck, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) runNotificationCheck(); });
+}
+
+function updateClock(){
+  document.getElementById('todayDate').textContent = formatDateEs(localDateStr(), {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+}
+
+/* ============ DASHBOARD ============ */
+function renderDashboard(){
+  const sold = state.sales.length;
+  const cashed = state.sales.filter(s => s.checkCashed).length;
+  document.getElementById('statSold').textContent = sold;
+  document.getElementById('statCashed').textContent = cashed;
+  document.getElementById('statPending').textContent = sold - cashed;
+}
+
+/* ============ SALES LIST ============ */
+function setFilter(f){
+  currentFilter = f;
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.filter === f));
+  renderSales();
+}
+
+function esc(str){
+  return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderSales(){
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  let list = state.sales.slice().sort((a,b) => (b.saleDate||'').localeCompare(a.saleDate||''));
+  if (currentFilter === 'pending') list = list.filter(s => !s.checkCashed);
+  if (currentFilter === 'cashed') list = list.filter(s => s.checkCashed);
+  if (q) list = list.filter(s => [s.clientName,s.brand,s.model,s.color,s.dealerNumber,s.phone].join(' ').toLowerCase().includes(q));
+
+  const container = document.getElementById('salesList');
+  const empty = document.getElementById('emptyState');
+  if (list.length === 0) {
+    container.innerHTML = '';
+    empty.style.display = 'block';
+    empty.querySelector('div:nth-child(2)') && (empty.querySelector('div:last-child').textContent = state.sales.length ? '' : 'Toca el botón + para agregar la primera.');
+    return;
+  }
+  empty.style.display = 'none';
+  container.innerHTML = list.map(s => `
+    <div class="sale-card">
+      <div class="sale-card-top">
+        <div>
+          <div class="sale-client">${esc(s.clientName) || 'Sin nombre'}</div>
+          <div class="sale-car">${esc(s.brand)} ${esc(s.model)}${s.color ? ' · ' + esc(s.color) : ''}</div>
+        </div>
+        <span class="status-badge ${s.checkCashed ? 'cashed' : 'pending'}">${s.checkCashed ? '✅ Cobrado' : '⏳ Pendiente'}</span>
+      </div>
+      <div class="sale-meta">
+        <span class="sale-meta-item">📅 ${formatDateEs(s.saleDate)}</span>
+        ${s.dealerNumber ? `<span class="sale-meta-item">🏷️ ${esc(s.dealerNumber)}</span>` : ''}
+        ${s.phone ? `<span class="sale-meta-item">📞 ${esc(s.phone)}</span>` : ''}
+        ${s.birthday ? `<span class="sale-meta-item">🎂 ${formatDateEs(s.birthday, {day:'numeric', month:'short'})}</span>` : ''}
+      </div>
+      ${s.notes ? `<div class="sale-notes">${esc(s.notes)}</div>` : ''}
+      <div class="sale-actions">
+        <button class="mini-btn primary" onclick="toggleCheckStatus('${s.id}')">${s.checkCashed ? '↩️ Marcar pendiente' : '💵 Marcar cobrado'}</button>
+        <button class="mini-btn" onclick="openSaleModal('${s.id}')">✏️ Editar</button>
+        <button class="mini-btn danger" onclick="deleteSale('${s.id}')">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleCheckStatus(id){
+  const s = state.sales.find(x => x.id === id);
+  if (!s) return;
+  s.checkCashed = !s.checkCashed;
+  s.checkCashedDate = s.checkCashed ? localDateStr() : '';
+  saveState(); renderDashboard(); renderSales(); runNotificationCheck();
+  showToast(s.checkCashed ? '✅ Cheque marcado como cobrado' : '⏳ Cheque marcado como pendiente');
+}
+
+function deleteSale(id){
+  if (!confirm('¿Eliminar esta venta? Esta acción no se puede deshacer.')) return;
+  state.sales = state.sales.filter(s => s.id !== id);
+  saveState(); renderDashboard(); renderSales(); runNotificationCheck();
+  showToast('Venta eliminada');
+}
+
+/* ============ SALE MODAL ============ */
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+function addImportantDateRow(label, date){
+  importantDatesDraft.push({ id: uid(), label: label || '', date: date || '' });
+  renderImportantDatesRows();
+}
+function removeImportantDateRow(rowId){
+  importantDatesDraft = importantDatesDraft.filter(r => r.id !== rowId);
+  renderImportantDatesRows();
+}
+function renderImportantDatesRows(){
+  const container = document.getElementById('importantDatesList');
+  container.innerHTML = importantDatesDraft.map(r => `
+    <div class="important-date-row">
+      <input class="form-input" placeholder="Ej. Aniversario de compra" value="${esc(r.label)}" oninput="updateImportantDateField('${r.id}','label',this.value)">
+      <input class="form-input" type="date" style="flex:0 0 150px" value="${esc(r.date)}" oninput="updateImportantDateField('${r.id}','date',this.value)">
+      <button class="remove-date-btn" onclick="removeImportantDateRow('${r.id}')">✕</button>
+    </div>
+  `).join('');
+}
+function updateImportantDateField(rowId, field, value){
+  const r = importantDatesDraft.find(x => x.id === rowId);
+  if (r) r[field] = value;
+}
+
+function toggleCheckedSwitch(){
+  checkedDraft = !checkedDraft;
+  document.getElementById('f_checkSwitch').classList.toggle('on', checkedDraft);
+  document.getElementById('f_cashedDateWrap').style.display = checkedDraft ? 'block' : 'none';
+  if (checkedDraft && !document.getElementById('f_cashedDate').value) document.getElementById('f_cashedDate').value = localDateStr();
+}
+
+function openSaleModal(id){
+  editingSaleId = id || null;
+  const s = id ? state.sales.find(x => x.id === id) : null;
+  document.getElementById('saleModalTitle').textContent = s ? 'Editar Venta' : 'Nueva Venta';
+  document.getElementById('f_clientName').value = s ? s.clientName || '' : '';
+  document.getElementById('f_phone').value = s ? s.phone || '' : '';
+  document.getElementById('f_dealerNumber').value = s ? s.dealerNumber || '' : '';
+  document.getElementById('f_brand').value = s ? s.brand || '' : '';
+  document.getElementById('f_model').value = s ? s.model || '' : '';
+  document.getElementById('f_color').value = s ? s.color || '' : '';
+  document.getElementById('f_saleDate').value = s ? s.saleDate || '' : localDateStr();
+  document.getElementById('f_birthday').value = s ? s.birthday || '' : '';
+  document.getElementById('f_notes').value = s ? s.notes || '' : '';
+  document.getElementById('f_cashedDate').value = s ? s.checkCashedDate || '' : '';
+  checkedDraft = s ? !!s.checkCashed : false;
+  document.getElementById('f_checkSwitch').classList.toggle('on', checkedDraft);
+  document.getElementById('f_cashedDateWrap').style.display = checkedDraft ? 'block' : 'none';
+  importantDatesDraft = s && Array.isArray(s.importantDates) ? s.importantDates.map(d => ({id: uid(), label:d.label, date:d.date})) : [];
+  renderImportantDatesRows();
+  document.getElementById('saleModalOverlay').classList.add('show');
+}
+function closeSaleModal(){ document.getElementById('saleModalOverlay').classList.remove('show'); }
+
+function saveSale(){
+  const clientName = document.getElementById('f_clientName').value.trim();
+  const saleDate = document.getElementById('f_saleDate').value;
+  if (!clientName) { showToast('⚠️ Ingresa el nombre del cliente'); return; }
+  if (!saleDate) { showToast('⚠️ Ingresa la fecha de venta'); return; }
+
+  const data = {
+    clientName,
+    phone: document.getElementById('f_phone').value.trim(),
+    dealerNumber: document.getElementById('f_dealerNumber').value.trim(),
+    brand: document.getElementById('f_brand').value.trim(),
+    model: document.getElementById('f_model').value.trim(),
+    color: document.getElementById('f_color').value.trim(),
+    saleDate,
+    birthday: document.getElementById('f_birthday').value,
+    notes: document.getElementById('f_notes').value.trim(),
+    checkCashed: checkedDraft,
+    checkCashedDate: checkedDraft ? (document.getElementById('f_cashedDate').value || localDateStr()) : '',
+    importantDates: importantDatesDraft.filter(r => r.date).map(r => ({ label: r.label.trim() || 'Fecha importante', date: r.date })),
+  };
+
+  if (editingSaleId) {
+    const s = state.sales.find(x => x.id === editingSaleId);
+    Object.assign(s, data);
+  } else {
+    data.id = uid();
+    data.createdAt = Date.now();
+    state.sales.push(data);
+  }
+  saveState(); renderDashboard(); renderSales(); runNotificationCheck();
+  closeSaleModal();
+  showToast('✅ Venta guardada');
+}
+
+/* ============ ALERTS ============ */
+function computeAlerts(){
+  const result = { today: [], upcoming: [], pendingChecks: [] };
+  const reminderDays = (state.settings && state.settings.checkReminderDays != null) ? state.settings.checkReminderDays : 3;
+  const tm = todayMidnight();
+  state.sales.forEach(sale => {
+    if (sale.birthday) {
+      const occ = nextOccurrence(sale.birthday);
+      const age = occ.sourceYear > 1900 ? (occ.date.getFullYear() - occ.sourceYear) : null;
+      const entry = { type:'birthday', sale, label:'Cumpleaños', daysUntil: occ.daysUntil, age };
+      if (occ.daysUntil === 0) result.today.push(entry);
+      else if (occ.daysUntil <= 7) result.upcoming.push(entry);
+    }
+    (sale.importantDates || []).forEach(idate => {
+      const occ = nextOccurrence(idate.date);
+      const entry = { type:'important', sale, label: idate.label || 'Fecha importante', daysUntil: occ.daysUntil };
+      if (occ.daysUntil === 0) result.today.push(entry);
+      else if (occ.daysUntil <= 7) result.upcoming.push(entry);
+    });
+    if (!sale.checkCashed && sale.saleDate) {
+      const daysSince = daysBetween(parseDate(sale.saleDate), tm);
+      if (daysSince >= reminderDays) result.pendingChecks.push({ sale, daysSince });
+    }
+  });
+  result.today.sort((a,b) => a.sale.clientName.localeCompare(b.sale.clientName));
+  result.upcoming.sort((a,b) => a.daysUntil - b.daysUntil);
+  result.pendingChecks.sort((a,b) => b.daysSince - a.daysSince);
+  return result;
+}
+
+function getNotifiedMap(){ try { return JSON.parse(localStorage.getItem(NOTIFIED_KEY) || '{}'); } catch(e) { return {}; } }
+function saveNotifiedMap(m){ try { localStorage.setItem(NOTIFIED_KEY, JSON.stringify(m)); } catch(e) {} }
+
+function runNotificationCheck(){
+  const alerts = computeAlerts();
+  const todayKey = localDateStr();
+  const notified = getNotifiedMap();
+  let changed = false;
+  alerts.today.forEach(a => {
+    const key = a.type + ':' + a.sale.id;
+    if (notified[key] !== todayKey) {
+      const ageTxt = a.age ? ` (cumple ${a.age} años)` : '';
+      fireNotification('🎉 ' + a.label + ': ' + a.sale.clientName, a.label + ' de ' + a.sale.clientName + ' es hoy' + ageTxt);
+      notified[key] = todayKey; changed = true;
+    }
+  });
+  alerts.pendingChecks.forEach(a => {
+    const key = 'check:' + a.sale.id;
+    if (notified[key] !== todayKey) {
+      fireNotification('💵 Cheque pendiente', a.sale.clientName + ' — ' + a.sale.brand + ' ' + a.sale.model + ', vendido hace ' + a.daysSince + ' días');
+      notified[key] = todayKey; changed = true;
+    }
+  });
+  if (changed) saveNotifiedMap(notified);
+  updateBellBadge(alerts);
+  return alerts;
+}
+
+function updateBellBadge(alerts){
+  const count = alerts.today.length + alerts.pendingChecks.length;
+  const badge = document.getElementById('bellBadge');
+  if (count > 0) { badge.style.display = 'flex'; badge.textContent = count > 99 ? '99+' : count; }
+  else badge.style.display = 'none';
+}
+
+function openAlertsPanel(){
+  const alerts = runNotificationCheck();
+  const content = document.getElementById('alertsContent');
+  let html = '';
+  const rowHtml = (icon, title, sub, extraClass) => `
+    <div class="alert-item ${extraClass||''}">
+      <div class="a-icon">${icon}</div>
+      <div class="a-text"><div class="a-title">${esc(title)}</div><div class="a-sub">${esc(sub)}</div></div>
+    </div>`;
+
+  if (alerts.today.length) {
+    html += '<div class="alert-section-title">Hoy</div>';
+    html += alerts.today.map(a => rowHtml(a.type === 'birthday' ? '🎂' : '📌', a.label + ': ' + a.sale.clientName, a.age ? 'Cumple ' + a.age + ' años' : (a.sale.brand + ' ' + a.sale.model), 'today')).join('');
+  }
+  if (alerts.pendingChecks.length) {
+    html += '<div class="alert-section-title">Cheques pendientes</div>';
+    html += alerts.pendingChecks.map(a => rowHtml('💵', a.sale.clientName + ' — ' + a.sale.brand + ' ' + a.sale.model, 'Vendido hace ' + a.daysSince + ' días · Dealer ' + (a.sale.dealerNumber || '—'), 'check')).join('');
+  }
+  if (alerts.upcoming.length) {
+    html += '<div class="alert-section-title">Próximos 7 días</div>';
+    html += alerts.upcoming.map(a => rowHtml(a.type === 'birthday' ? '🎂' : '📌', a.label + ': ' + a.sale.clientName, 'En ' + a.daysUntil + ' día' + (a.daysUntil===1?'':'s'), '')).join('');
+  }
+  if (!html) html = '<div class="empty-state" style="padding:30px 10px;"><div class="icon">🔕</div><div>No hay alertas por ahora.</div></div>';
+  content.innerHTML = html;
+  document.getElementById('alertsOverlay').classList.add('show');
+}
+function closeAlertsPanel(){ document.getElementById('alertsOverlay').classList.remove('show'); }
+
+/* ============ NOTIFICATIONS (browser / service worker) ============ */
+async function registerSW(){
+  if (!('serviceWorker' in navigator)) return;
+  try { swRegistration = await navigator.serviceWorker.register('sw.js'); }
+  catch(e) { console.log('SW registration unavailable in this context', e); }
+}
+
+function fireNotification(title, body){
+  try {
+    if (!window.Notification || Notification.permission !== 'granted') return;
+    const options = { body, tag: title };
+    if (swRegistration && swRegistration.showNotification) swRegistration.showNotification(title, options);
+    else new Notification(title, options);
+  } catch(e) { console.log('notification failed', e); }
+}
+
+function updateNotifPermissionUI(){
+  const statusEl = document.getElementById('notifStatusText');
+  const btn = document.getElementById('notifPermBtn');
+  if (!window.Notification) { statusEl.textContent = 'Este navegador no soporta notificaciones'; btn.style.display = 'none'; return; }
+  if (Notification.permission === 'granted') { statusEl.textContent = '✅ Notificaciones activadas'; btn.style.display = 'none'; }
+  else if (Notification.permission === 'denied') { statusEl.textContent = '🚫 Bloqueadas — actívalas en ajustes del navegador'; btn.style.display = 'none'; }
+  else { statusEl.textContent = 'Notificaciones desactivadas'; btn.style.display = 'block'; }
+}
+
+function requestNotifPermission(){
+  if (!window.Notification) { showToast('Este navegador no soporta notificaciones'); return; }
+  Notification.requestPermission().then(perm => {
+    updateNotifPermissionUI();
+    showToast(perm === 'granted' ? 'Notificaciones activadas ✅' : 'Notificaciones no permitidas');
+    if (perm === 'granted') runNotificationCheck();
+  });
+}
+
+/* ============ SETTINGS ============ */
+function openSettingsPanel(){
+  document.getElementById('s_reminderDays').value = (state.settings && state.settings.checkReminderDays != null) ? state.settings.checkReminderDays : 3;
+  document.getElementById('settingsOverlay').classList.add('show');
+}
+function closeSettingsPanel(){ document.getElementById('settingsOverlay').classList.remove('show'); }
+function saveSettings(){
+  const v = parseInt(document.getElementById('s_reminderDays').value, 10);
+  state.settings.checkReminderDays = isNaN(v) ? 3 : Math.max(0, v);
+  saveState(); runNotificationCheck();
+  closeSettingsPanel();
+  showToast('Ajustes guardados');
+}
+
+function exportData(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'autoventas-respaldo-' + localDateStr() + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Respaldo exportado');
+}
+function importData(event){
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if (!Array.isArray(parsed.sales)) throw new Error('formato inválido');
+      state = Object.assign(makeFreshState(), parsed);
+      saveState(); renderDashboard(); renderSales(); runNotificationCheck();
+      showToast('✅ Datos importados');
+      closeSettingsPanel();
+    } catch(e) { showToast('⚠️ El archivo no es un respaldo válido'); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+function confirmClearAll(){
+  if (!confirm('¿Borrar TODOS los datos? Exporta un respaldo antes si no estás seguro.')) return;
+  state = makeFreshState();
+  saveState(); renderDashboard(); renderSales(); runNotificationCheck();
+  closeSettingsPanel();
+  showToast('Datos borrados');
+}
+
+/* ============ TOAST ============ */
+let toastTimer = null;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+</script>
+</body>
+</html>
