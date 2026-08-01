@@ -426,12 +426,23 @@ function esc(str){
   return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+function normalizeDigits(str){ return String(str || '').replace(/\D/g, ''); }
+
 function renderSales(){
-  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const qRaw = document.getElementById('searchInput').value.trim();
+  const q = qRaw.toLowerCase();
+  const qDigits = normalizeDigits(qRaw);
   let list = state.sales.slice().sort((a,b) => (b.saleDate||'').localeCompare(a.saleDate||''));
   if (currentFilter === 'pending') list = list.filter(s => !s.checkCashed);
   if (currentFilter === 'cashed') list = list.filter(s => s.checkCashed);
-  if (q) list = list.filter(s => [s.clientName,s.brand,s.model,s.color,s.dealerNumber,s.phone].join(' ').toLowerCase().includes(q));
+  if (q) list = list.filter(s => {
+    const text = [s.clientName,s.brand,s.model,s.color,s.dealerNumber,s.phone].join(' ').toLowerCase();
+    if (text.includes(q)) return true;
+    if (!qDigits) return false;
+    const phoneDigits = normalizeDigits(s.phone);
+    const dealerDigits = normalizeDigits(s.dealerNumber);
+    return (phoneDigits && phoneDigits.includes(qDigits)) || (dealerDigits && dealerDigits.includes(qDigits));
+  });
 
   const container = document.getElementById('salesList');
   const empty = document.getElementById('emptyState');
@@ -560,6 +571,7 @@ function saveSale(){
     importantDates: importantDatesDraft.filter(r => r.date).map(r => ({ label: r.label.trim() || 'Fecha importante', date: r.date })),
   };
 
+  const isNew = !editingSaleId;
   if (editingSaleId) {
     const s = state.sales.find(x => x.id === editingSaleId);
     Object.assign(s, data);
@@ -567,6 +579,13 @@ function saveSale(){
     data.id = uid();
     data.createdAt = Date.now();
     state.sales.push(data);
+  }
+  if (isNew) {
+    // A new sale is pending/uncashed by default, so if the user was viewing a filtered
+    // or searched list it could get saved "invisibly" — reset the view so it's always shown.
+    currentFilter = 'all';
+    document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.filter === 'all'));
+    document.getElementById('searchInput').value = '';
   }
   saveState(); renderDashboard(); renderSales(); runNotificationCheck();
   closeSaleModal();
