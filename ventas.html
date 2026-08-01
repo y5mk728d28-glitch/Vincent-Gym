@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="theme-color" content="#04070d">
-<meta name="build-version" content="2026-08-01-03">
+<meta name="build-version" content="2026-08-01-04">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Vincent Dealer">
@@ -196,7 +196,7 @@ h1,h2,.display{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;}
   </section>
 
   <section class="toolbar">
-    <input class="search-input" id="searchInput" placeholder="🔍 Buscar cliente, carro, dealer #..." oninput="renderSales()">
+    <input class="search-input" id="searchInput" placeholder="🔍 Buscar cliente, carro, deal #..." oninput="renderSales()">
     <div class="filter-chips">
       <button class="chip active" data-filter="all" onclick="setFilter('all')">Todas</button>
       <button class="chip" data-filter="pending" onclick="setFilter('pending')">Pendientes</button>
@@ -232,7 +232,7 @@ h1,h2,.display{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;}
           <input class="form-input" id="f_phone" placeholder="(555) 123-4567">
         </div>
         <div class="form-group">
-          <label class="form-label">Número de dealer</label>
+          <label class="form-label">Número de deal</label>
           <input class="form-input" id="f_dealerNumber" placeholder="Ej. D-4821">
         </div>
       </div>
@@ -722,7 +722,7 @@ function openAlertsPanel(){
   }
   if (alerts.pendingChecks.length) {
     html += '<div class="alert-section-title">Cheques pendientes</div>';
-    html += alerts.pendingChecks.map(a => rowHtml('💵', a.sale.clientName + ' — ' + a.sale.brand + ' ' + a.sale.model, 'Vendido hace ' + a.daysSince + ' días · Dealer ' + (a.sale.dealerNumber || '—'), 'check')).join('');
+    html += alerts.pendingChecks.map(a => rowHtml('💵', a.sale.clientName + ' — ' + a.sale.brand + ' ' + a.sale.model, 'Vendido hace ' + a.daysSince + ' días · Deal ' + (a.sale.dealerNumber || '—'), 'check')).join('');
   }
   if (alerts.upcoming.length) {
     html += '<div class="alert-section-title">Próximos 7 días</div>';
