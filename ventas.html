@@ -149,7 +149,7 @@ h1,h2,.display{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;}
 .alert-item.check{border-color:rgba(245,158,11,.3);background:var(--warn-soft);}
 .notif-status{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;}
 .notif-status .txt{font-size:13px;color:var(--muted);}
-.small-btn{background:var(--accent-soft);color:var(--accent2);padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;}
+.small-btn{background:var(--accent-soft);color:var(--accent2);padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;flex-shrink:0;white-space:nowrap;}
 
 /* ===== TOAST ===== */
 .toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);background:#151f38;border:1px solid var(--border-strong);color:var(--text);padding:12px 18px;border-radius:30px;font-size:13px;font-weight:500;box-shadow:var(--shadow-md);opacity:0;pointer-events:none;transition:all .25s var(--ease);z-index:400;max-width:88vw;text-align:center;}
@@ -576,7 +576,7 @@ function openSaleModal(id){
   checkedDraft = s ? !!s.checkCashed : false;
   document.getElementById('f_checkSwitch').classList.toggle('on', checkedDraft);
   document.getElementById('f_cashedDateWrap').style.display = checkedDraft ? 'block' : 'none';
-  importantDatesDraft = s && Array.isArray(s.importantDates) ? s.importantDates.map(d => ({id: uid(), label:d.label, date:d.date})) : [];
+  importantDatesDraft = s && Array.isArray(s.importantDates) ? s.importantDates.map(d => ({id: d.id || uid(), label:d.label, date:d.date})) : [];
   renderImportantDatesRows();
   document.getElementById('saleModalOverlay').classList.add('show');
 }
@@ -600,7 +600,7 @@ function saveSale(){
     notes: document.getElementById('f_notes').value.trim(),
     checkCashed: checkedDraft,
     checkCashedDate: checkedDraft ? (document.getElementById('f_cashedDate').value || localDateStr()) : '',
-    importantDates: importantDatesDraft.filter(r => r.date).map(r => ({ label: r.label.trim() || 'Fecha importante', date: r.date })),
+    importantDates: importantDatesDraft.filter(r => r.date).map(r => ({ id: r.id || uid(), label: r.label.trim() || 'Fecha importante', date: r.date })),
   };
 
   const isNew = !editingSaleId;
@@ -610,6 +610,7 @@ function saveSale(){
   } else {
     data.id = uid();
     data.createdAt = Date.now();
+    data.congratulated = {};
     state.sales.push(data);
   }
   if (isNew) {
@@ -630,17 +631,21 @@ function computeAlerts(){
   const reminderDays = (state.settings && state.settings.checkReminderDays != null) ? state.settings.checkReminderDays : 3;
   const tm = todayMidnight();
   state.sales.forEach(sale => {
+    const congrat = sale.congratulated || {};
     if (sale.birthday) {
       const occ = nextOccurrence(sale.birthday);
       const age = occ.sourceYear > 1900 ? (occ.date.getFullYear() - occ.sourceYear) : null;
-      const entry = { type:'birthday', sale, label:'Cumpleaños', daysUntil: occ.daysUntil, age };
-      if (occ.daysUntil === 0) result.today.push(entry);
+      const occYear = String(occ.date.getFullYear());
+      const entry = { type:'birthday', key:'birthday', sale, label:'Cumpleaños', daysUntil: occ.daysUntil, age, occYear };
+      if (occ.daysUntil === 0) { if (congrat.birthday !== occYear) result.today.push(entry); }
       else if (occ.daysUntil <= 7) result.upcoming.push(entry);
     }
     (sale.importantDates || []).forEach(idate => {
       const occ = nextOccurrence(idate.date);
-      const entry = { type:'important', sale, label: idate.label || 'Fecha importante', daysUntil: occ.daysUntil };
-      if (occ.daysUntil === 0) result.today.push(entry);
+      const occYear = String(occ.date.getFullYear());
+      const key = idate.id || idate.date;
+      const entry = { type:'important', key, sale, label: idate.label || 'Fecha importante', daysUntil: occ.daysUntil, occYear };
+      if (occ.daysUntil === 0) { if (congrat[key] !== occYear) result.today.push(entry); }
       else if (occ.daysUntil <= 7) result.upcoming.push(entry);
     });
     if (!sale.checkCashed && sale.saleDate) {
@@ -659,15 +664,18 @@ function saveNotifiedMap(m){ try { localStorage.setItem(NOTIFIED_KEY, JSON.strin
 
 function runNotificationCheck(){
   const alerts = computeAlerts();
+  const now = new Date();
+  const hourKey = localDateStr(now) + '-' + String(now.getHours()).padStart(2, '0');
   const todayKey = localDateStr();
   const notified = getNotifiedMap();
   let changed = false;
   alerts.today.forEach(a => {
-    const key = a.type + ':' + a.sale.id;
-    if (notified[key] !== todayKey) {
+    // Fires once per clock hour (all day, until marked "Ya felicité") rather than once per day.
+    const key = 'hr:' + a.type + ':' + a.sale.id + ':' + a.key;
+    if (notified[key] !== hourKey) {
       const ageTxt = a.age ? ` (cumple ${a.age} años)` : '';
       fireNotification('🎉 ' + a.label + ': ' + a.sale.clientName, a.label + ' de ' + a.sale.clientName + ' es hoy' + ageTxt);
-      notified[key] = todayKey; changed = true;
+      notified[key] = hourKey; changed = true;
     }
   });
   alerts.pendingChecks.forEach(a => {
@@ -698,10 +706,19 @@ function openAlertsPanel(){
       <div class="a-icon">${icon}</div>
       <div class="a-text"><div class="a-title">${esc(title)}</div><div class="a-sub">${esc(sub)}</div></div>
     </div>`;
+  const todayRowHtml = (a) => `
+    <div class="alert-item today">
+      <div class="a-icon">${a.type === 'birthday' ? '🎂' : '📌'}</div>
+      <div class="a-text">
+        <div class="a-title">${esc(a.label + ': ' + a.sale.clientName)}</div>
+        <div class="a-sub">${esc(a.age ? 'Cumple ' + a.age + ' años' : (a.sale.brand + ' ' + a.sale.model))}</div>
+      </div>
+      <button class="small-btn" onclick="markCongratulated('${a.sale.id}','${esc(a.key)}')">✓ Ya felicité</button>
+    </div>`;
 
   if (alerts.today.length) {
     html += '<div class="alert-section-title">Hoy</div>';
-    html += alerts.today.map(a => rowHtml(a.type === 'birthday' ? '🎂' : '📌', a.label + ': ' + a.sale.clientName, a.age ? 'Cumple ' + a.age + ' años' : (a.sale.brand + ' ' + a.sale.model), 'today')).join('');
+    html += alerts.today.map(todayRowHtml).join('');
   }
   if (alerts.pendingChecks.length) {
     html += '<div class="alert-section-title">Cheques pendientes</div>';
@@ -716,6 +733,16 @@ function openAlertsPanel(){
   document.getElementById('alertsOverlay').classList.add('show');
 }
 function closeAlertsPanel(){ document.getElementById('alertsOverlay').classList.remove('show'); }
+
+function markCongratulated(saleId, key){
+  const s = state.sales.find(x => x.id === saleId);
+  if (!s) return;
+  if (!s.congratulated) s.congratulated = {};
+  s.congratulated[key] = String(new Date().getFullYear());
+  saveState();
+  showToast('🎉 Marcado como felicitado — no te volverá a notificar hasta el próximo año');
+  openAlertsPanel();
+}
 
 /* ============ NOTIFICATIONS (browser / service worker) ============ */
 async function registerSW(){
