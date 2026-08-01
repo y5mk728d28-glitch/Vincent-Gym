@@ -7,6 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="theme-color" content="#04070d">
+<meta name="build-version" content="2026-08-01-01">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Vincent Dealer">
@@ -153,6 +154,11 @@ h1,h2,.display{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;}
 /* ===== TOAST ===== */
 .toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);background:#151f38;border:1px solid var(--border-strong);color:var(--text);padding:12px 18px;border-radius:30px;font-size:13px;font-weight:500;box-shadow:var(--shadow-md);opacity:0;pointer-events:none;transition:all .25s var(--ease);z-index:400;max-width:88vw;text-align:center;}
 .toast.show{opacity:1;transform:translate(-50%,0);}
+
+/* ===== UPDATE BANNER — shown when a newer deployed version is detected ===== */
+#updateBanner{position:fixed;top:0;left:0;right:0;z-index:999;background:linear-gradient(135deg,var(--accent),var(--accent-dim));color:#fff;padding:12px 16px;padding-top:max(12px,env(safe-area-inset-top));display:none;align-items:center;justify-content:space-between;gap:10px;font-size:13px;box-shadow:0 4px 18px rgba(0,0,0,.5);}
+#updateBanner.show{display:flex;}
+#updateBanner button{background:#fff;color:var(--accent-dim);border:none;padding:8px 16px;border-radius:20px;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1px;font-weight:700;flex-shrink:0;}
 </style>
 </head>
 <body>
@@ -326,6 +332,11 @@ h1,h2,.display{font-family:'Bebas Neue',sans-serif;letter-spacing:.03em;}
 
 <div class="toast" id="toast"></div>
 
+<div id="updateBanner">
+  <span>Hay una versión nueva disponible.</span>
+  <button onclick="forceFreshReload()">ACTUALIZAR</button>
+</div>
+
 <script>
 /* ============ STATE & PERSISTENCE ============ */
 const STORAGE_KEY = 'autoventas-state';
@@ -399,7 +410,28 @@ async function init(){
   updateNotifPermissionUI();
   runNotificationCheck();
   setInterval(runNotificationCheck, 60000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) runNotificationCheck(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { runNotificationCheck(); checkForNewVersion(); } });
+  checkForNewVersion();
+}
+
+/* ============ UPDATE CHECK ============
+   GitHub Pages + Safari can both cache this file for a while, so a fresh
+   deploy doesn't always show up just by closing and reopening the shortcut.
+   This re-fetches the live page (bypassing cache) and compares its
+   build-version meta tag against ours; if it differs, prompt to reload. */
+function forceFreshReload(){
+  location.href = location.href.split('#')[0].split('?')[0] + '?_v=' + Date.now();
+}
+function checkForNewVersion(){
+  const myVersion = document.querySelector('meta[name="build-version"]')?.content;
+  if (!myVersion) return;
+  fetch(location.href.split('#')[0].split('?')[0] + '?_v=' + Date.now(), { cache: 'no-store' })
+    .then(r => r.text())
+    .then(html => {
+      const m = html.match(/name="build-version" content="([^"]+)"/);
+      if (m && m[1] && m[1] !== myVersion) document.getElementById('updateBanner')?.classList.add('show');
+    })
+    .catch(() => {});
 }
 
 function updateClock(){
