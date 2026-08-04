@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="build-version" content="2026-07-10-02">
+<meta name="build-version" content="2026-07-10-03">
 <title>Vincent Forge — Training Log</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -1061,7 +1061,7 @@
 
   /* ADD EXERCISE MODAL */
   #exerciseModal {
-    display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:100;
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:170;
     align-items:center; justify-content:center; padding:20px 20px 85px;
   }
   #exerciseModal.show { display:flex; }
@@ -4435,9 +4435,15 @@ function buildExerciseFromTemplate(template) {
     workingSets.push({weight:'', reps:'', approx:false, unit:'lb', refWeight:'', refReps:''});
   }
   const halfWeight = lastTopWeight ? (parseFloat(lastTopWeight) / 2) : '';
+  const lastApprox = (last && last.sets) ? last.sets.filter(s => s.approx && s.weight) : [];
+  const approxCount = template.approxCount || 2;
   const approxSets = [];
-  for (let i=0; i<(template.approxCount||2); i++) {
-    approxSets.push({weight: halfWeight ? String(Math.round(halfWeight*(1+i*0.3))) : '', reps:'', approx:true, unit:lastUnit, refWeight:'', refReps:''});
+  for (let i=0; i<approxCount; i++) {
+    if (lastApprox[i]) {
+      approxSets.push({weight:'', reps:'', approx:true, unit:lastApprox[i].unit||lastUnit, refWeight:lastApprox[i].weight, refReps:lastApprox[i].reps, refUnit:lastApprox[i].unit||lastUnit});
+    } else {
+      approxSets.push({weight: halfWeight ? String(Math.round(halfWeight*(1+i*0.3))) : '', reps:'', approx:true, unit:lastUnit, refWeight:'', refReps:''});
+    }
   }
   return {
     name: template.name, muscle: template.muscle,
@@ -5096,10 +5102,12 @@ function addExerciseToWeek(name, muscle, skipClose) {
   }
 
   const halfWeight = lastTopWeight ? (parseFloat(lastTopWeight) / 2) : '';
-  const approxSets = [
-    {weight: halfWeight ? String(halfWeight) : '', reps:'', approx:true, refWeight:'', refReps:''},
-    {weight: halfWeight ? String(Math.round(halfWeight*1.3)) : '', reps:'', approx:true, refWeight:'', refReps:''}
-  ];
+  const lastApprox = (last && last.sets) ? last.sets.filter(s => s.approx && s.weight) : [];
+  const approxGuesses = [halfWeight ? String(halfWeight) : '', halfWeight ? String(Math.round(halfWeight*1.3)) : ''];
+  const approxSets = [0,1].map(i => lastApprox[i]
+    ? {weight:'', reps:'', approx:true, refWeight:lastApprox[i].weight, refReps:lastApprox[i].reps}
+    : {weight: approxGuesses[i], reps:'', approx:true, refWeight:'', refReps:''}
+  );
 
   exercises.push({
     name, muscle,
