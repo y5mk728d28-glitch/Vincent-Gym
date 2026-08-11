@@ -236,7 +236,7 @@ function hideAllViews(){
 function showSetupView(){ hideAllViews(); document.getElementById('view-setup').classList.add('show'); }
 function showLoginView(){
   hideAllViews();
-  document.getElementById('loginBrandTitle').textContent = state.setup.lender.nombre || 'Vincent Loans';
+  document.getElementById('loginBrandTitle').textContent = state.setup.lender.nombre || 'Vincent Bank';
   document.getElementById('view-login').classList.add('show');
 }
 function showAdminView(){
