@@ -16,6 +16,36 @@ const FREQ_DAYS = { diario:1, semanal:7, quincenal:15, anual:365 };
 const FREQ_LABEL = { diario:'Diario', semanal:'Semanal', quincenal:'Quincenal', anual:'Anual', personalizado:'Personalizado' };
 const PENALTY_RATE = 0.05;
 
+/* ============ ID / FOLIO GENERATORS ============
+   Cliente:  {Iniciales(2)}{AñoNac(2)}{Estado(2)}{5 dígitos al azar}   — asignado una sola vez, de por vida
+   Préstamo: {Estado(2)}{Año del préstamo(2)}{Categoría(1)}{5 dígitos al azar}
+             Categoría por monto: <$100 = C, $100–$9,999.99 = M, >=$10,000 = D
+*/
+function nameInitials(nombre){
+  const words = String(nombre||'').trim().split(/\s+/).filter(Boolean);
+  if(words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  if(words.length === 1) return words[0].slice(0,2).toUpperCase().padEnd(2,'X');
+  return 'XX';
+}
+function montoCategoria(monto){
+  if(monto < 100) return 'C';
+  if(monto < 10000) return 'M';
+  return 'D';
+}
+function generateClientCodigo(nombre, anioNacimiento, estado){
+  const prefix = nameInitials(nombre) + String(anioNacimiento).slice(-2) + estado;
+  let codigo;
+  do { codigo = prefix + randomDigits(5); } while(state.clients.some(c => c.codigo === codigo));
+  return codigo;
+}
+function generateLoanFolio(estado, fechaInicio, principal){
+  const anio = String(parseDate(fechaInicio).getFullYear()).slice(-2);
+  const prefix = estado + anio + montoCategoria(principal);
+  let folio;
+  do { folio = prefix + randomDigits(5); } while(state.loans.some(l => l.folio === folio));
+  return folio;
+}
+
 /* ============ STATE & PERSISTENCE ============ */
 function defaultState(){
   return {
@@ -88,7 +118,7 @@ function buildSchedule(loan){
       cuotas.push({
         numero:i, fechaVencimiento: localDateStr(venc),
         capital, interes: interesPeriodo, montoBase: round2(capital + interesPeriodo),
-        estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:''
+        estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[]
       });
     }
   } else {
@@ -105,7 +135,7 @@ function buildSchedule(loan){
       cuotas.push({
         numero:i, fechaVencimiento: localDateStr(venc),
         capital, interes, montoBase: round2(capital + interes),
-        estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:''
+        estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[]
       });
     }
   }
@@ -142,13 +172,25 @@ function montoAPagar(cuota){
   const est = cuotaEstatus(cuota);
   return est === 'atrasado' ? round2(cuota.montoBase * (1+PENALTY_RATE)) : cuota.montoBase;
 }
+function interesAPagar(cuota){
+  const est = cuotaEstatus(cuota);
+  return est === 'atrasado' ? round2(cuota.interes * (1+PENALTY_RATE)) : cuota.interes;
+}
+function cuotaPagosTotal(cuota){
+  return round2((cuota.pagos||[]).reduce((s,p) => s + p.monto, 0));
+}
+function renewalHint(cuota){
+  const n = (cuota.pagos||[]).filter(p => p.tipo === 'interes').length;
+  if(!n || cuota.estatus === 'cobrado') return '';
+  return ` · 🔄 ${n} renovación${n>1?'es':''} (${fmtMoney(cuotaPagosTotal(cuota))} cobrado)`;
+}
 
 function loanTotals(loan){
   let pagado = 0, saldo = 0, atrasadas = 0;
   for(const c of loan.cuotas){
     const est = cuotaEstatus(c);
-    if(est === 'cobrado'){ pagado += c.montoPagado; }
-    else { saldo += montoAPagar(c); if(est === 'atrasado') atrasadas++; }
+    pagado += cuotaPagosTotal(c);
+    if(est !== 'cobrado'){ saldo += montoAPagar(c); if(est === 'atrasado') atrasadas++; }
   }
   return { pagado: round2(pagado), saldo: round2(saldo), atrasadas };
 }
@@ -205,7 +247,7 @@ async function loginAdmin(){
 }
 
 async function loginClient(){
-  const code = document.getElementById('li_clientCode').value.trim();
+  const code = document.getElementById('li_clientCode').value.trim().toUpperCase();
   const pin = document.getElementById('li_clientPin').value.trim();
   const err = document.getElementById('li_error');
   const client = state.clients.find(c => c.codigo === code);
@@ -282,6 +324,7 @@ function openClientModal(){
   document.getElementById('c_direccion').value = '';
   document.getElementById('c_ciudad').value = '';
   document.getElementById('c_estado').value = 'NV';
+  document.getElementById('c_anioNacimiento').value = '';
   document.getElementById('c_pin').value = '';
   document.getElementById('c_notas').value = '';
   document.getElementById('clientModalOverlay').classList.add('show');
@@ -291,10 +334,12 @@ function closeClientModal(){ document.getElementById('clientModalOverlay').class
 async function saveClient(){
   const nombre = document.getElementById('c_nombre').value.trim();
   const pin = document.getElementById('c_pin').value.trim();
+  const anioNacimiento = parseInt(document.getElementById('c_anioNacimiento').value, 10);
+  const estado = document.getElementById('c_estado').value;
   if(!nombre){ showToast('Ingresa el nombre del cliente'); return; }
+  if(!(anioNacimiento >= 1900 && anioNacimiento <= new Date().getFullYear())){ showToast('Ingresa un año de nacimiento válido'); return; }
   if(!/^\d{4}$/.test(pin)){ showToast('El PIN del cliente debe ser de 4 dígitos'); return; }
-  let codigo;
-  do { codigo = randomDigits(6); } while(state.clients.some(c => c.codigo === codigo));
+  const codigo = generateClientCodigo(nombre, anioNacimiento, estado);
   const client = {
     id: uid(),
     nombre,
@@ -302,7 +347,7 @@ async function saveClient(){
     email: document.getElementById('c_email').value.trim(),
     direccion: document.getElementById('c_direccion').value.trim(),
     ciudad: document.getElementById('c_ciudad').value.trim(),
-    estado: document.getElementById('c_estado').value,
+    estado, anioNacimiento,
     notas: document.getElementById('c_notas').value.trim(),
     codigo, pinHash: await hashPin(pin),
     createdAt: Date.now()
@@ -329,7 +374,7 @@ function deleteClient(id){
 function renderClients(){
   const q = (document.getElementById('clientSearch').value || '').toLowerCase();
   const list = document.getElementById('clientsList');
-  const items = state.clients.filter(c => c.nombre.toLowerCase().includes(q) || c.codigo.includes(q));
+  const items = state.clients.filter(c => c.nombre.toLowerCase().includes(q) || c.codigo.toLowerCase().includes(q));
   if(!items.length){
     list.innerHTML = '';
     document.getElementById('emptyStateGlobal').style.display = state.clients.length ? 'none' : 'block';
@@ -439,6 +484,7 @@ function updateLoanPreview(){
 async function saveLoan(){
   const clientId = document.getElementById('l_clientId').value;
   if(!clientId){ showToast('Selecciona un cliente'); return; }
+  const client = state.clients.find(c => c.id === clientId);
   const draft = draftLoanFromForm();
   if(!draft){ showToast('Completa monto, tasa, # de cuotas y fecha correctamente'); return; }
   const cuotas = buildSchedule(draft);
@@ -450,7 +496,7 @@ async function saveLoan(){
     numCuotas: draft.numCuotas, fechaInicio: draft.fechaInicio,
     cuotas, createdAt: Date.now()
   };
-  loan.folio = 'P-' + loan.id.slice(-6).toUpperCase();
+  loan.folio = generateLoanFolio(client.estado, loan.fechaInicio, loan.principal);
   state.loans.push(loan);
   await saveState();
   closeLoanModal();
@@ -531,7 +577,7 @@ function renderLoanDetail(){
       <div class="cuota-num">${c.numero}</div>
       <div class="cuota-info">
         <div class="cuota-date">${formatDateEs(c.fechaVencimiento)}</div>
-        <div class="cuota-amt">${fmtMoney(monto)}${est==='atrasado' ? ' (con 5% penalidad)' : ''}</div>
+        <div class="cuota-amt">${fmtMoney(monto)}${est==='atrasado' ? ' (con 5% penalidad)' : ''}${renewalHint(c)}</div>
       </div>
       <span class="status-badge ${est}">${est}</span>
     </div>`;
@@ -540,6 +586,23 @@ function renderLoanDetail(){
 
 /* ============ PAYMENTS ============ */
 let payCtx = null;
+let currentPayType = 'full';
+
+function setPayType(type){
+  currentPayType = type;
+  document.getElementById('paytype_full').classList.toggle('active', type==='full');
+  document.getElementById('paytype_interest').classList.toggle('active', type==='interest');
+  document.getElementById('pay_interestHint').style.display = type==='interest' ? '' : 'none';
+  document.getElementById('payConfirmBtn').textContent = type==='interest' ? 'Renovar cuota' : 'Marcar cobrado';
+  if(!payCtx) return;
+  const loan = state.loans.find(l => l.id === payCtx.loanId);
+  const c = loan.cuotas.find(x => x.numero === payCtx.numero);
+  const monto = type==='interest' ? interesAPagar(c) : montoAPagar(c);
+  document.getElementById('pay_montoLabel').textContent = type==='interest' ? 'Monto a cobrar (interés)' : 'Monto a cobrar';
+  document.getElementById('pay_monto').textContent = fmtMoney(monto);
+  document.getElementById('pay_montoPagado').value = monto;
+}
+
 function openPayModal(loanId, numero){
   const loan = state.loans.find(l => l.id === loanId);
   const c = loan.cuotas.find(x => x.numero === numero);
@@ -548,10 +611,9 @@ function openPayModal(loanId, numero){
   document.getElementById('pay_numero').textContent = c.numero;
   document.getElementById('pay_venc').textContent = formatDateEs(c.fechaVencimiento);
   document.getElementById('pay_estatus').textContent = est;
-  document.getElementById('pay_monto').textContent = fmtMoney(montoAPagar(c));
   document.getElementById('pay_fecha').value = localDateStr();
-  document.getElementById('pay_montoPagado').value = montoAPagar(c);
   document.getElementById('pay_metodo').value = 'Efectivo';
+  setPayType('full');
   document.getElementById('payModalOverlay').classList.add('show');
 }
 function closePayModal(){ document.getElementById('payModalOverlay').classList.remove('show'); }
@@ -560,20 +622,32 @@ async function confirmPayment(){
   if(!payCtx) return;
   const loan = state.loans.find(l => l.id === payCtx.loanId);
   const c = loan.cuotas.find(x => x.numero === payCtx.numero);
-  c.estatus = 'cobrado';
-  c.fechaPago = document.getElementById('pay_fecha').value;
-  c.montoPagado = round2(parseFloat(document.getElementById('pay_montoPagado').value) || 0);
-  c.metodoPago = document.getElementById('pay_metodo').value;
+  const fecha = document.getElementById('pay_fecha').value;
+  const monto = round2(parseFloat(document.getElementById('pay_montoPagado').value) || 0);
+  const metodo = document.getElementById('pay_metodo').value;
+
+  if(currentPayType === 'interest'){
+    c.pagos.push({ fecha, monto, tipo:'interes', metodo });
+    c.fechaVencimiento = localDateStr(addDays(todayMidnight(), periodDays(loan)));
+    c.estatus = 'pendiente';
+  } else {
+    c.pagos.push({ fecha, monto, tipo:'completo', metodo });
+    c.estatus = 'cobrado';
+    c.fechaPago = fecha;
+    c.montoPagado = monto;
+    c.metodoPago = metodo;
+  }
   await saveState();
   closePayModal();
   renderLoanDetail();
   renderLoans();
-  showToast('Pago registrado');
+  showToast(currentPayType === 'interest' ? 'Cuota renovada' : 'Pago registrado');
 }
 async function undoPayment(loanId, numero){
   if(!confirm('¿Deshacer este pago y marcar la cuota como pendiente de nuevo?')) return;
   const loan = state.loans.find(l => l.id === loanId);
   const c = loan.cuotas.find(x => x.numero === numero);
+  c.pagos.pop();
   c.estatus = 'pendiente'; c.fechaPago = null; c.montoPagado = 0; c.metodoPago = '';
   await saveState();
   renderLoanDetail();
@@ -590,10 +664,11 @@ function renderDashboard(){
     const client = state.clients.find(c => c.id === loan.clientId);
     for(const c of loan.cuotas){
       const est = cuotaEstatus(c);
-      if(est === 'cobrado'){
-        const pd = parseDate(c.fechaPago);
-        if(pd && pd.getMonth()===now.getMonth() && pd.getFullYear()===now.getFullYear()) cobradoMes += c.montoPagado;
-      } else {
+      for(const p of (c.pagos||[])){
+        const pd = parseDate(p.fecha);
+        if(pd && pd.getMonth()===now.getMonth() && pd.getFullYear()===now.getFullYear()) cobradoMes += p.monto;
+      }
+      if(est !== 'cobrado'){
         const amt = montoAPagar(c);
         cartera += amt;
         if(est === 'atrasado'){ atrasado += amt; upcoming.push({loan, client, c, est}); }
@@ -644,7 +719,7 @@ function renderClientView(){
       const monto = est === 'cobrado' ? c.montoPagado : montoAPagar(c);
       return `<div class="cuota-row" style="margin:0 0 8px;">
         <div class="cuota-num">${c.numero}</div>
-        <div class="cuota-info"><div class="cuota-date">${formatDateEs(c.fechaVencimiento)}</div><div class="cuota-amt">${fmtMoney(monto)}${est==='atrasado' ? ' (con 5% penalidad)' : ''}</div></div>
+        <div class="cuota-info"><div class="cuota-date">${formatDateEs(c.fechaVencimiento)}</div><div class="cuota-amt">${fmtMoney(monto)}${est==='atrasado' ? ' (con 5% penalidad)' : ''}${renewalHint(c)}</div></div>
         <span class="status-badge ${est}">${est}</span>
       </div>`;
     }).join('');
