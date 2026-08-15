@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="theme-color" content="#060907">
-<meta name="build-version" content="2026-08-11-03">
+<meta name="build-version" content="2026-08-14-01">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Vincent Bank">
@@ -268,7 +268,7 @@ a{color:var(--accent2);}
       <div id="loginPanelCliente" style="display:none">
         <div class="form-group">
           <label class="form-label">Código de cliente</label>
-          <input class="form-input" id="li_clientCode" inputmode="numeric" maxlength="6" placeholder="Ej. 482913">
+          <input class="form-input" id="li_clientCode" style="text-transform:uppercase" maxlength="11" placeholder="Ej. MP98NV12345">
         </div>
         <div class="form-group">
           <label class="form-label">PIN</label>
@@ -432,6 +432,11 @@ a{color:var(--accent2);}
         </div>
       </div>
       <div class="form-group">
+        <label class="form-label">Año de nacimiento</label>
+        <input class="form-input" id="c_anioNacimiento" type="number" min="1900" max="2026" placeholder="Ej. 1998">
+        <div class="form-hint">Se usa para generar el ID de cliente permanente (iniciales + año + estado + folio).</div>
+      </div>
+      <div class="form-group">
         <label class="form-label">PIN de acceso del cliente (4 dígitos)</label>
         <input class="form-input" id="c_pin" inputmode="numeric" maxlength="4" placeholder="Ej. 1234">
         <div class="form-hint">El código de cliente se genera automáticamente. Compártelo junto con este PIN para que el cliente entre a su cuenta.</div>
@@ -552,12 +557,23 @@ a{color:var(--accent2);}
       <button class="modal-close" onclick="closePayModal()">✕</button>
     </div>
     <div class="modal-body">
+      <div class="type-grid" style="margin-bottom:14px;">
+        <button class="type-opt active" id="paytype_full" onclick="setPayType('full')">
+          <div class="t-name">Pago completo</div>
+          <div class="t-desc">Cierra la cuota</div>
+        </button>
+        <button class="type-opt" id="paytype_interest" onclick="setPayType('interest')">
+          <div class="t-name">Solo interés</div>
+          <div class="t-desc">Renueva la cuota — sigue debiendo el capital</div>
+        </button>
+      </div>
       <div class="preview-box">
         <div class="preview-row"><span>Cuota #</span><b id="pay_numero">—</b></div>
         <div class="preview-row"><span>Vencimiento</span><b id="pay_venc">—</b></div>
         <div class="preview-row"><span>Estatus</span><b id="pay_estatus">—</b></div>
-        <div class="preview-row total"><span>Monto a cobrar</span><b id="pay_monto">$0</b></div>
+        <div class="preview-row total"><span id="pay_montoLabel">Monto a cobrar</span><b id="pay_monto">$0</b></div>
       </div>
+      <div class="form-hint" id="pay_interestHint" style="display:none;margin-top:8px;">Al confirmar, la cuota se renueva por otro periodo: sigue debiendo el mismo capital + interés en la próxima fecha, y esta renovación queda registrada en su historial.</div>
       <div class="form-row" style="margin-top:14px;">
         <div class="form-group">
           <label class="form-label">Fecha de pago</label>
@@ -580,7 +596,7 @@ a{color:var(--accent2);}
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closePayModal()">Cancelar</button>
-      <button class="btn btn-primary" onclick="confirmPayment()">Marcar cobrado</button>
+      <button class="btn btn-primary" id="payConfirmBtn" onclick="confirmPayment()">Marcar cobrado</button>
     </div>
   </div>
 </div>
