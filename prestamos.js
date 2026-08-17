@@ -298,6 +298,7 @@ function showClientView(){
 
 let currentAdminTab = 'dashboard';
 let currentLoanId = null;
+let currentClientId = null;
 
 function switchAdminTab(tab){
   currentAdminTab = tab;
@@ -305,11 +306,12 @@ function switchAdminTab(tab){
   document.getElementById('navDashboard').classList.toggle('active', tab==='dashboard');
   document.getElementById('navClientes').classList.toggle('active', tab==='clientes');
   document.getElementById('navPrestamos').classList.toggle('active', tab==='prestamos');
-  document.getElementById('mainFab').style.display = tab === 'loandetail' ? 'none' : 'flex';
+  document.getElementById('mainFab').style.display = (tab === 'loandetail' || tab === 'clientdetail') ? 'none' : 'flex';
   if(tab==='dashboard'){ document.getElementById('admin-tab-dashboard').style.display=''; renderDashboard(); }
   else if(tab==='clientes'){ document.getElementById('admin-tab-clientes').style.display=''; renderClients(); }
   else if(tab==='prestamos'){ document.getElementById('admin-tab-prestamos').style.display=''; renderLoans(); }
   else if(tab==='loandetail'){ document.getElementById('admin-tab-loandetail').style.display=''; }
+  else if(tab==='clientdetail'){ document.getElementById('admin-tab-clientdetail').style.display=''; }
 }
 function handleFabClick(){
   if(currentAdminTab === 'clientes') openClientModal();
@@ -317,16 +319,23 @@ function handleFabClick(){
 }
 
 /* ============ CLIENTS ============ */
-function openClientModal(){
-  document.getElementById('c_nombre').value = '';
-  document.getElementById('c_telefono').value = '';
-  document.getElementById('c_email').value = '';
-  document.getElementById('c_direccion').value = '';
-  document.getElementById('c_ciudad').value = '';
-  document.getElementById('c_estado').value = 'NV';
-  document.getElementById('c_anioNacimiento').value = '';
+let editingClientId = null;
+function openClientModal(clientId){
+  editingClientId = clientId || null;
+  const c = editingClientId ? state.clients.find(x => x.id === editingClientId) : null;
+  document.getElementById('clientModalTitle').textContent = c ? 'Editar cliente' : 'Nuevo cliente';
+  document.getElementById('c_nombre').value = c ? c.nombre : '';
+  document.getElementById('c_telefono').value = c ? c.telefono : '';
+  document.getElementById('c_email').value = c ? c.email : '';
+  document.getElementById('c_direccion').value = c ? c.direccion : '';
+  document.getElementById('c_ciudad').value = c ? c.ciudad : '';
+  document.getElementById('c_estado').value = c ? c.estado : 'NV';
+  document.getElementById('c_anioNacimiento').value = c ? (c.anioNacimiento || '') : '';
+  document.getElementById('c_codigo').value = c ? c.codigo : '';
   document.getElementById('c_pin').value = '';
-  document.getElementById('c_notas').value = '';
+  document.getElementById('c_pinLabel').textContent = c ? 'Nuevo PIN (opcional)' : 'PIN de acceso del cliente (4 dígitos)';
+  document.getElementById('c_pinHint').textContent = c ? 'Deja en blanco para mantener el PIN actual.' : 'El código de cliente se genera automáticamente. Compártelo junto con este PIN para que el cliente entre a su cuenta.';
+  document.getElementById('c_notas').value = c ? c.notas : '';
   document.getElementById('clientModalOverlay').classList.add('show');
 }
 function closeClientModal(){ document.getElementById('clientModalOverlay').classList.remove('show'); }
@@ -336,20 +345,46 @@ async function saveClient(){
   const pin = document.getElementById('c_pin').value.trim();
   const anioNacimiento = parseInt(document.getElementById('c_anioNacimiento').value, 10);
   const estado = document.getElementById('c_estado').value;
+  const direccion = document.getElementById('c_direccion').value.trim();
+  const ciudad = document.getElementById('c_ciudad').value.trim();
+  const telefono = document.getElementById('c_telefono').value.trim();
+  const email = document.getElementById('c_email').value.trim();
+  const notas = document.getElementById('c_notas').value.trim();
+  const codigoInput = document.getElementById('c_codigo').value.trim().toUpperCase();
   if(!nombre){ showToast('Ingresa el nombre del cliente'); return; }
   if(!(anioNacimiento >= 1900 && anioNacimiento <= new Date().getFullYear())){ showToast('Ingresa un año de nacimiento válido'); return; }
-  if(!/^\d{4}$/.test(pin)){ showToast('El PIN del cliente debe ser de 4 dígitos'); return; }
-  const codigo = generateClientCodigo(nombre, anioNacimiento, estado);
+
+  const editing = editingClientId ? state.clients.find(c => c.id === editingClientId) : null;
+  if(!editing && !/^\d{4}$/.test(pin)){ showToast('El PIN del cliente debe ser de 4 dígitos'); return; }
+  if(editing && pin && !/^\d{4}$/.test(pin)){ showToast('El PIN debe ser de 4 dígitos, o déjalo en blanco para no cambiarlo'); return; }
+
+  let codigo;
+  if(codigoInput){
+    if(state.clients.some(c => c.codigo === codigoInput && c.id !== editingClientId)){ showToast('Ese ID de cliente ya está en uso'); return; }
+    codigo = codigoInput;
+  } else {
+    codigo = editing ? editing.codigo : generateClientCodigo(nombre, anioNacimiento, estado);
+  }
+
+  if(editing){
+    if(editing.direccion !== direccion || editing.ciudad !== ciudad || editing.estado !== estado){
+      editing.historialDirecciones = editing.historialDirecciones || [];
+      editing.historialDirecciones.push({ direccion: editing.direccion, ciudad: editing.ciudad, estado: editing.estado, fecha: localDateStr() });
+    }
+    Object.assign(editing, { nombre, telefono, email, direccion, ciudad, estado, anioNacimiento, notas, codigo });
+    if(pin) editing.pinHash = await hashPin(pin);
+    await saveState();
+    closeClientModal();
+    renderClients();
+    if(currentClientId === editing.id) renderClientDetail();
+    showToast('Cliente actualizado');
+    return;
+  }
+
   const client = {
-    id: uid(),
-    nombre,
-    telefono: document.getElementById('c_telefono').value.trim(),
-    email: document.getElementById('c_email').value.trim(),
-    direccion: document.getElementById('c_direccion').value.trim(),
-    ciudad: document.getElementById('c_ciudad').value.trim(),
-    estado, anioNacimiento,
-    notas: document.getElementById('c_notas').value.trim(),
+    id: uid(), nombre, telefono, email, direccion, ciudad, estado, anioNacimiento, notas,
     codigo, pinHash: await hashPin(pin),
+    historialDirecciones: [],
     createdAt: Date.now()
   };
   state.clients.push(client);
@@ -368,7 +403,7 @@ function deleteClient(id){
   if(!confirm('¿Eliminar este cliente?')) return;
   state.clients = state.clients.filter(c => c.id !== id);
   saveState();
-  renderClients();
+  if(currentAdminTab === 'clientdetail') closeClientDetail(); else renderClients();
 }
 
 function renderClients(){
@@ -384,16 +419,18 @@ function renderClients(){
   document.getElementById('emptyStateGlobal').style.display = 'none';
   list.innerHTML = items.map(c => {
     const loanCount = state.loans.filter(l => l.clientId === c.id).length;
-    return `<div class="item-card">
+    const score = computeCreditScore(c);
+    return `<div class="item-card" onclick="openClientDetail('${c.id}')">
       <div class="item-top">
-        <div><div class="item-title">${escapeHtml(c.nombre)}</div><div class="item-sub">Código: ${c.codigo} · ${loanCount} préstamo(s)</div></div>
+        <div><div class="item-title">${escapeHtml(c.nombre)}</div><div class="item-sub">${c.codigo} · ${loanCount} préstamo(s)</div></div>
+        <span class="status-badge ${score.color}">${score.score}</span>
       </div>
       <div class="item-meta">
         ${c.telefono ? `<div class="item-meta-item">📞 ${escapeHtml(c.telefono)}</div>` : ''}
         ${c.estado ? `<div class="item-meta-item">📍 ${escapeHtml(c.ciudad||'')} ${c.estado}</div>` : ''}
       </div>
-      <div class="item-actions">
-        <button class="mini-btn primary" onclick="viewClientCode('${c.id}')">🔑 Ver acceso</button>
+      <div class="item-actions" onclick="event.stopPropagation()">
+        <button class="mini-btn primary" onclick="openClientDetail('${c.id}')">👤 Ver detalle</button>
         <button class="mini-btn" onclick="openLoanModalFor('${c.id}')">+ Préstamo</button>
         <button class="mini-btn danger" onclick="deleteClient('${c.id}')">🗑️</button>
       </div>
@@ -412,6 +449,112 @@ function openLoanModalFor(clientId){
   openLoanModal();
   document.getElementById('l_clientId').value = clientId;
   updateLoanPreview();
+}
+
+/* ============ CREDIT SCORE (internal heuristic, not a real credit bureau score) ============ */
+function computeCreditScore(client){
+  const loans = state.loans.filter(l => l.clientId === client.id);
+  let score = 650;
+  let renovaciones = 0, prestamosCompletados = 0, cuotasTardias = 0;
+  let atrasoActivo = false;
+  for(const loan of loans){
+    let loanCompletado = loan.cuotas.length > 0;
+    for(const c of loan.cuotas){
+      const est = cuotaEstatus(c);
+      if(est === 'atrasado') atrasoActivo = true;
+      renovaciones += (c.pagos||[]).filter(p => p.tipo === 'interes').length;
+      if(est === 'cobrado'){
+        if(c.fechaPago && parseDate(c.fechaPago) > parseDate(c.fechaVencimiento)) cuotasTardias++;
+      } else {
+        loanCompletado = false;
+      }
+    }
+    if(loanCompletado) prestamosCompletados++;
+  }
+  score += Math.min(prestamosCompletados * 15, 90);
+  score -= Math.min(renovaciones * 5, 100);
+  score -= Math.min(cuotasTardias * 8, 80);
+  if(atrasoActivo) score -= 40;
+  score = Math.max(300, Math.min(850, Math.round(score)));
+  let label, color;
+  if(score >= 740){ label = 'Excelente'; color = 'cobrado'; }
+  else if(score >= 640){ label = 'Bueno'; color = 'cobrado'; }
+  else if(score >= 560){ label = 'Regular'; color = 'pendiente'; }
+  else { label = 'Riesgo'; color = 'atrasado'; }
+  return { score, label, color, prestamosCompletados, renovaciones, cuotasTardias, atrasoActivo };
+}
+
+/* ============ CLIENT DETAIL ============ */
+function openClientDetail(clientId){
+  currentClientId = clientId;
+  switchAdminTab('clientdetail');
+  renderClientDetail();
+}
+function closeClientDetail(){ switchAdminTab('clientes'); }
+
+function renderClientDetail(){
+  const client = state.clients.find(c => c.id === currentClientId);
+  if(!client) return;
+  const loans = state.loans.filter(l => l.clientId === client.id);
+  const score = computeCreditScore(client);
+
+  document.getElementById('cd_nombre').textContent = client.nombre;
+  document.getElementById('cd_codigo').textContent = client.codigo;
+  document.getElementById('cd_score').textContent = score.score;
+  document.getElementById('cd_score').style.color = `var(--${score.color==='cobrado'?'good':score.color==='pendiente'?'warn':'danger'})`;
+  document.getElementById('cd_scoreLabel').textContent = score.label + (score.atrasoActivo ? ' · tiene cuota(s) atrasada(s) ahora' : '');
+  document.getElementById('cd_scoreLabel').className = 'status-badge ' + score.color;
+
+  let prestadoHist = 0, pagadoHist = 0;
+  const ledger = [];
+  for(const loan of loans){
+    prestadoHist += loan.principal;
+    for(const c of loan.cuotas){
+      for(const p of (c.pagos||[])){
+        pagadoHist += p.monto;
+        ledger.push({ fecha:p.fecha, monto:p.monto, tipo:p.tipo, metodo:p.metodo, folio:loan.folio, numero:c.numero });
+      }
+    }
+  }
+  document.getElementById('cd_kpiPrestado').textContent = fmtMoney(prestadoHist);
+  document.getElementById('cd_kpiPagado').textContent = fmtMoney(pagadoHist);
+  document.getElementById('cd_kpiPrestamos').textContent = loans.length;
+
+  document.getElementById('cd_infoCard').innerHTML = `
+    <div class="item-meta" style="flex-direction:column;gap:8px;align-items:flex-start;">
+      <div class="item-meta-item">📞 ${escapeHtml(client.telefono || '—')}</div>
+      <div class="item-meta-item">✉️ ${escapeHtml(client.email || '—')}</div>
+      <div class="item-meta-item">📍 ${escapeHtml(client.direccion || '—')}, ${escapeHtml(client.ciudad || '—')}, ${client.estado || '—'}</div>
+      <div class="item-meta-item">🎂 ${client.anioNacimiento || '—'}</div>
+      ${client.notas ? `<div class="item-meta-item">📝 ${escapeHtml(client.notas)}</div>` : ''}
+    </div>`;
+
+  const hist = client.historialDirecciones || [];
+  document.getElementById('cd_addressHistory').innerHTML = hist.length ? hist.slice().reverse().map(h => `
+    <div class="item-card"><div class="item-sub">${formatDateEs(h.fecha)}</div><div>${escapeHtml(h.direccion || '—')}, ${escapeHtml(h.ciudad || '—')}, ${h.estado || '—'}</div></div>
+  `).join('') : '<div class="empty-state" style="padding:20px;"><div>Sin cambios de dirección registrados.</div></div>';
+
+  document.getElementById('cd_loansList').innerHTML = loans.length ? loans.map(loan => {
+    const totals = loanTotals(loan);
+    const status = loanStatusLabel(loan);
+    return `<div class="item-card" onclick="openLoanDetail('${loan.id}')">
+      <div class="item-top">
+        <div><div class="item-title">${loan.folio}</div><div class="item-sub">${fmtMoney(loan.principal)} · ${FREQ_LABEL[loan.frecuencia]}</div></div>
+        <span class="status-badge ${status}">${status}</span>
+      </div>
+      <div class="item-meta"><div class="item-meta-item">💵 Saldo: ${fmtMoney(totals.saldo)}</div></div>
+    </div>`;
+  }).join('') : '<div class="empty-state" style="padding:20px;"><div>Sin préstamos todavía.</div></div>';
+
+  ledger.sort((a,b) => b.fecha.localeCompare(a.fecha));
+  document.getElementById('cd_paymentLedger').innerHTML = ledger.length ? ledger.map(p => `
+    <div class="item-card">
+      <div class="item-top">
+        <div><div class="item-title">${fmtMoney(p.monto)}</div><div class="item-sub">${p.folio} · Cuota #${p.numero} · ${p.metodo}</div></div>
+        <span class="status-badge ${p.tipo==='interes' ? 'pendiente' : 'cobrado'}">${p.tipo==='interes' ? 'solo interés' : 'completo'}</span>
+      </div>
+      <div class="item-meta"><div class="item-meta-item">📅 ${formatDateEs(p.fecha)}</div></div>
+    </div>`).join('') : '<div class="empty-state" style="padding:20px;"><div>Sin pagos registrados todavía.</div></div>';
 }
 
 /* ============ LOANS ============ */
@@ -734,7 +877,8 @@ function renderClientView(){
       </div>
       <div style="margin-top:12px;">${rows}</div>
       <div class="item-actions">
-        <button class="mini-btn primary" onclick="generateContractPDF('${loan.id}')">📄 Ver / descargar mi contrato</button>
+        <button class="mini-btn primary" onclick="generateContractPDF('${loan.id}','es')">📄 Contrato (Español)</button>
+        <button class="mini-btn primary" onclick="generateContractPDF('${loan.id}','en')">📄 Contract (English)</button>
       </div>
     </div>`;
   }).join('');
@@ -799,9 +943,82 @@ function importData(ev){
 }
 
 /* ============ PDF CONTRACT ============ */
-function generateContractPDF(loanId){
+const CONTRACT_FREQ_EN = { diario:'daily', semanal:'weekly', quincenal:'biweekly', anual:'annual', personalizado:'custom-interval' };
+const CONTRACT_FREQ_ES = { diario:'diario', semanal:'semanal', quincenal:'quincenal', anual:'anual', personalizado:'de intervalo personalizado' };
+
+const CONTRACT_STRINGS = {
+  en: {
+    docTitle: 'PROMISSORY NOTE AND LOAN AGREEMENT',
+    loanIdDate: (folio, date) => 'Loan ID: ' + folio + '   |   Date: ' + date,
+    notice: 'NOTICE: This document is a template generated for general convenience and does NOT constitute legal advice. Interest rates, fees, and disclosure requirements for consumer loans are governed by the laws of the state where the Lender operates and, in many cases, by mandatory consumer-protection laws of the state where the Borrower resides. Interstate lending may require licensing in the Borrower\'s state. Both parties should consult a licensed attorney before relying on this agreement.',
+    s1: '1. PARTIES',
+    lenderLine: (l) => 'Lender: ' + (l.nombre||'—') + ', residing/operating at ' + (l.direccion||'—') + ', ' + (l.ciudad||'—') + ', ' + (l.estado||'—') + ' ("Lender").',
+    borrowerLine: (c) => 'Borrower: ' + (c?c.nombre:'—') + ', residing at ' + (c?(c.direccion||'—'):'—') + ', ' + (c?(c.ciudad||'—'):'—') + ', ' + (c?(c.estado||'—'):'—') + ' ("Borrower").',
+    s2: '2. LOAN AMOUNT',
+    loanAmount: (m,f) => 'Lender agrees to lend Borrower the principal sum of ' + m + ' USD, disbursed on or about ' + f + '.',
+    s3: '3. INTEREST',
+    interestSimple: (t,f,it) => 'Interest is calculated as simple interest at a fixed rate of ' + t + '% per ' + f + ' payment period, applied to the original principal amount, for a total interest of ' + it + ' over the life of the loan.',
+    interestApr: (t,it) => 'Interest is calculated on an amortizing basis (declining balance), at a nominal annual rate of ' + t + '%, applied to the outstanding principal balance each payment period, for a total interest of ' + it + ' over the life of the loan.',
+    aprDisclosure: (a) => 'Disclosure — Effective Annual Percentage Rate (APR): ' + a + '%. This figure reflects the true annualized cost of this loan based on the payment schedule below, consistent with standard Truth in Lending Act (TILA) disclosure practice.',
+    s4: '4. PAYMENT SCHEDULE',
+    schedule: (n,f,extra,start,total) => 'Total of ' + n + ' payments, ' + f + extra + ', beginning ' + start + '. Total amount to be repaid if all payments are made on time: ' + total + '.',
+    everyDays: (n) => ' (every ' + n + ' days)',
+    thNum:'#', thDue:'Due Date', thPrincipal:'Principal', thInterest:'Interest', thPayment:'Payment',
+    s5: '5. LATE PAYMENT FEE',
+    lateFee: 'If any installment is not received by its due date, a one-time late fee equal to five percent (5%) of that installment amount will be added to the amount due for that installment. This fee does not compound and applies once per late installment.',
+    s6: '6. PREPAYMENT',
+    prepay: 'Borrower may prepay all or part of the outstanding balance at any time without penalty.',
+    s7: '7. DEFAULT',
+    default_: 'If Borrower fails to make a payment within a reasonable grace period after its due date, Lender may declare the remaining unpaid balance immediately due and payable, and may pursue any remedy available under applicable law, including referral to collections.',
+    s8: '8. GOVERNING LAW',
+    governing: (e) => 'This Agreement shall be governed by the laws of the State of ' + e + ', without regard to its conflict-of-laws principles, EXCEPT to the extent that the mandatory consumer-protection or usury laws of Borrower\'s state of residence apply and cannot be waived by contract, in which case such laws shall govern to that limited extent.',
+    s9: '9. ELECTRONIC SIGNATURES / ENTIRE AGREEMENT',
+    entire: 'This Agreement constitutes the entire understanding between the parties. The parties agree that electronic or typed signatures below are intended to have the same legal effect as handwritten signatures, pursuant to the federal ESIGN Act. If any provision of this Agreement is held unenforceable, the remaining provisions remain in full force.',
+    lenderSig: (n) => 'Lender Signature: ' + (n||''),
+    borrowerSig: (n) => 'Borrower Signature: ' + (n||''),
+    dateLine: 'Date: ______________',
+    fname: 'Contract-'
+  },
+  es: {
+    docTitle: 'PAGARÉ Y CONTRATO DE PRÉSTAMO',
+    loanIdDate: (folio, date) => 'Préstamo #: ' + folio + '   |   Fecha: ' + date,
+    notice: 'AVISO: Este documento es una plantilla generada por conveniencia general y NO constituye asesoría legal. Las tasas de interés, cargos y requisitos de divulgación para préstamos al consumidor están regidos por las leyes del estado donde opera el Prestamista y, en muchos casos, por las leyes de protección al consumidor del estado donde reside el Cliente. Prestar dinero a residentes de otros estados puede requerir una licencia en el estado del Cliente. Ambas partes deben consultar a un abogado licenciado antes de basarse en este contrato. Esta es una traducción de cortesía para facilitar la comprensión del Cliente — en caso de discrepancia con la versión en inglés, prevalece el texto en inglés.',
+    s1: '1. PARTES',
+    lenderLine: (l) => 'Prestamista: ' + (l.nombre||'—') + ', con domicilio/operando en ' + (l.direccion||'—') + ', ' + (l.ciudad||'—') + ', ' + (l.estado||'—') + ' ("Prestamista").',
+    borrowerLine: (c) => 'Cliente: ' + (c?c.nombre:'—') + ', con domicilio en ' + (c?(c.direccion||'—'):'—') + ', ' + (c?(c.ciudad||'—'):'—') + ', ' + (c?(c.estado||'—'):'—') + ' ("Cliente").',
+    s2: '2. MONTO DEL PRÉSTAMO',
+    loanAmount: (m,f) => 'El Prestamista acuerda prestar al Cliente la suma de capital de ' + m + ' USD, desembolsada alrededor del ' + f + '.',
+    s3: '3. INTERÉS',
+    interestSimple: (t,f,it) => 'El interés se calcula como interés simple a una tasa fija de ' + t + '% por cada periodo de pago ' + f + ', aplicado sobre el monto de capital original, para un interés total de ' + it + ' durante la vida del préstamo.',
+    interestApr: (t,it) => 'El interés se calcula sobre saldo insoluto (amortización decreciente), a una tasa anual nominal de ' + t + '%, aplicada sobre el saldo de capital pendiente en cada periodo de pago, para un interés total de ' + it + ' durante la vida del préstamo.',
+    aprDisclosure: (a) => 'Divulgación — Tasa de Interés Anual Efectiva (APR): ' + a + '%. Esta cifra refleja el costo anualizado real de este préstamo con base en el calendario de pagos a continuación, siguiendo la práctica estándar de divulgación equivalente a la Truth in Lending Act (TILA) de EE. UU.',
+    s4: '4. CALENDARIO DE PAGOS',
+    schedule: (n,f,extra,start,total) => 'Total de ' + n + ' pagos, de frecuencia ' + f + extra + ', comenzando el ' + start + '. Monto total a pagar si todos los pagos se realizan a tiempo: ' + total + '.',
+    everyDays: (n) => ' (cada ' + n + ' días)',
+    thNum:'#', thDue:'Vencimiento', thPrincipal:'Capital', thInterest:'Interés', thPayment:'Pago',
+    s5: '5. CARGO POR PAGO ATRASADO',
+    lateFee: 'Si una cuota no se recibe en su fecha de vencimiento, se añadirá a esa cuota un cargo por atraso único equivalente al cinco por ciento (5%) del monto de esa cuota. Este cargo no es acumulativo y aplica una sola vez por cuota atrasada.',
+    s6: '6. PAGO ANTICIPADO',
+    prepay: 'El Cliente puede pagar por adelantado, total o parcialmente, el saldo pendiente en cualquier momento sin penalidad.',
+    s7: '7. INCUMPLIMIENTO',
+    default_: 'Si el Cliente no realiza un pago dentro de un periodo de gracia razonable después de su vencimiento, el Prestamista podrá declarar de inmediato exigible el saldo pendiente total y podrá recurrir a cualquier remedio disponible bajo la ley aplicable, incluyendo el envío a cobranza.',
+    s8: '8. LEY APLICABLE',
+    governing: (e) => 'Este Contrato se regirá por las leyes del Estado de ' + e + ', sin considerar sus principios de conflicto de leyes, EXCEPTO en la medida en que las leyes obligatorias de protección al consumidor o de usura del estado de residencia del Cliente apliquen y no puedan renunciarse por contrato, en cuyo caso dichas leyes regirán en esa medida limitada.',
+    s9: '9. FIRMAS ELECTRÓNICAS / ACUERDO COMPLETO',
+    entire: 'Este Contrato constituye el entendimiento completo entre las partes. Ambas partes acuerdan que las firmas electrónicas o escritas a continuación tienen el mismo efecto legal que una firma manuscrita, conforme a la ley federal ESIGN Act de EE. UU. Si alguna disposición de este Contrato se considera inválida, las demás disposiciones permanecen vigentes.',
+    lenderSig: (n) => 'Firma del Prestamista: ' + (n||''),
+    borrowerSig: (n) => 'Firma del Cliente: ' + (n||''),
+    dateLine: 'Fecha: ______________',
+    fname: 'Contrato-'
+  }
+};
+
+function generateContractPDF(loanId, lang){
+  lang = (lang === 'es') ? 'es' : 'en';
+  const T = CONTRACT_STRINGS[lang];
   const loan = state.loans.find(l => l.id === loanId);
   if(!loan) return;
+  const freqLabel = (lang === 'es' ? CONTRACT_FREQ_ES : CONTRACT_FREQ_EN)[loan.frecuencia];
   const client = state.clients.find(c => c.id === loan.clientId);
   const lender = state.setup.lender;
   const { jsPDF } = window.jspdf;
@@ -810,6 +1027,11 @@ function generateContractPDF(loanId){
   const marginX = 54;
   let y = 50;
   const lineH = 14;
+  const dateOpts = {day:'numeric', month:'long', year:'numeric'};
+  function fmtDate(s, opts){
+    const d = parseDate(s); if(!d) return '—';
+    return d.toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-US', opts || dateOpts);
+  }
 
   function wrapText(text, width, size){
     doc.setFontSize(size);
@@ -840,15 +1062,15 @@ function generateContractPDF(loanId){
 
   // Title
   doc.setFont('helvetica','bold'); doc.setFontSize(15);
-  doc.text('PROMISSORY NOTE AND LOAN AGREEMENT', pageW/2, y, {align:'center'});
+  doc.text(T.docTitle, pageW/2, y, {align:'center'});
   y += 20;
   doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
-  doc.text('Loan ID: ' + loan.folio + '   |   Date: ' + formatDateEs(loan.fechaInicio, {day:'numeric',month:'long',year:'numeric'}), pageW/2, y, {align:'center'});
+  doc.text(T.loanIdDate(loan.folio, fmtDate(loan.fechaInicio)), pageW/2, y, {align:'center'});
   y += 20;
 
   // Disclaimer box
   doc.setDrawColor(200,150,20); doc.setFillColor(255,248,225);
-  const discText = wrapText('NOTICE: This document is a template generated for general convenience and does NOT constitute legal advice. Interest rates, fees, and disclosure requirements for consumer loans are governed by the laws of the state where the Lender operates and, in many cases, by mandatory consumer-protection laws of the state where the Borrower resides. Interstate lending may require licensing in the Borrower\'s state. Both parties should consult a licensed attorney before relying on this agreement.', pageW - marginX*2 - 16, 8);
+  const discText = wrapText(T.notice, pageW - marginX*2 - 16, 8);
   const boxH = discText.length * 10 + 14;
   doc.rect(marginX, y, pageW - marginX*2, boxH, 'FD');
   doc.setFontSize(8); doc.setTextColor(120,80,0);
@@ -856,38 +1078,39 @@ function generateContractPDF(loanId){
   doc.setTextColor(0,0,0);
   y += boxH + 18;
 
-  heading('1. PARTIES');
-  para('Lender: ' + (lender.nombre||'—') + ', residing/operating at ' + (lender.direccion||'—') + ', ' + (lender.ciudad||'—') + ', ' + (lender.estado||'—') + ' ("Lender").');
-  para('Borrower: ' + (client ? client.nombre : '—') + ', residing at ' + (client ? (client.direccion||'—') : '—') + ', ' + (client ? (client.ciudad||'—') : '—') + ', ' + (client ? (client.estado||'—') : '—') + ' ("Borrower").');
+  heading(T.s1);
+  para(T.lenderLine(lender));
+  para(T.borrowerLine(client));
 
-  heading('2. LOAN AMOUNT');
-  para('Lender agrees to lend Borrower the principal sum of ' + fmtMoney(loan.principal) + ' USD, disbursed on or about ' + formatDateEs(loan.fechaInicio) + '.');
+  heading(T.s2);
+  para(T.loanAmount(fmtMoney(loan.principal), fmtDate(loan.fechaInicio)));
 
-  heading('3. INTEREST');
+  heading(T.s3);
   if(loan.tasaTipo === 'simple'){
-    para('Interest is calculated as simple interest at a fixed rate of ' + loan.tasa + '% per ' + FREQ_LABEL[loan.frecuencia].toLowerCase() + ' payment period, applied to the original principal amount, for a total interest of ' + fmtMoney(interesTotal) + ' over the life of the loan.');
+    para(T.interestSimple(loan.tasa, freqLabel, fmtMoney(interesTotal)));
   } else {
-    para('Interest is calculated on an amortizing basis (declining balance), at a nominal annual rate of ' + loan.tasa + '%, applied to the outstanding principal balance each payment period, for a total interest of ' + fmtMoney(interesTotal) + ' over the life of the loan.');
+    para(T.interestApr(loan.tasa, fmtMoney(interesTotal)));
   }
-  para('Disclosure — Effective Annual Percentage Rate (APR): ' + apr.toFixed(2) + '%. This figure reflects the true annualized cost of this loan based on the payment schedule below, consistent with standard Truth in Lending Act (TILA) disclosure practice.', 9.5);
+  para(T.aprDisclosure(apr.toFixed(2)), 9.5);
 
-  heading('4. PAYMENT SCHEDULE');
-  para('Total of ' + loan.numCuotas + ' payments, ' + FREQ_LABEL[loan.frecuencia].toLowerCase() + (loan.frecuencia==='personalizado' ? (' (every ' + loan.diasPersonalizado + ' days)') : '') + ', beginning ' + formatDateEs(cuotas[0].fechaVencimiento) + '. Total amount to be repaid if all payments are made on time: ' + fmtMoney(totalAPagar) + '.');
+  heading(T.s4);
+  const extra = loan.frecuencia === 'personalizado' ? T.everyDays(loan.diasPersonalizado) : '';
+  para(T.schedule(loan.numCuotas, freqLabel, extra, fmtDate(cuotas[0].fechaVencimiento), fmtMoney(totalAPagar)));
 
   ensureSpace(20);
   doc.setFont('helvetica','bold'); doc.setFontSize(9);
-  doc.text('#', marginX, y);
-  doc.text('Due Date', marginX+40, y);
-  doc.text('Principal', marginX+160, y);
-  doc.text('Interest', marginX+260, y);
-  doc.text('Payment', marginX+360, y);
+  doc.text(T.thNum, marginX, y);
+  doc.text(T.thDue, marginX+40, y);
+  doc.text(T.thPrincipal, marginX+160, y);
+  doc.text(T.thInterest, marginX+260, y);
+  doc.text(T.thPayment, marginX+360, y);
   y += 10;
   doc.setDrawColor(180); doc.line(marginX, y, pageW-marginX, y); y += 10;
   doc.setFont('helvetica','normal');
   for(const c of cuotas){
     ensureSpace(lineH);
     doc.text(String(c.numero), marginX, y);
-    doc.text(formatDateEs(c.fechaVencimiento), marginX+40, y);
+    doc.text(fmtDate(c.fechaVencimiento), marginX+40, y);
     doc.text(fmtMoney(c.capital), marginX+160, y);
     doc.text(fmtMoney(c.interes), marginX+260, y);
     doc.text(fmtMoney(c.montoBase), marginX+360, y);
@@ -895,20 +1118,20 @@ function generateContractPDF(loanId){
   }
   y += 12;
 
-  heading('5. LATE PAYMENT FEE');
-  para('If any installment is not received by its due date, a one-time late fee equal to five percent (5%) of that installment amount will be added to the amount due for that installment. This fee does not compound and applies once per late installment.');
+  heading(T.s5);
+  para(T.lateFee);
 
-  heading('6. PREPAYMENT');
-  para('Borrower may prepay all or part of the outstanding balance at any time without penalty.');
+  heading(T.s6);
+  para(T.prepay);
 
-  heading('7. DEFAULT');
-  para('If Borrower fails to make a payment within a reasonable grace period after its due date, Lender may declare the remaining unpaid balance immediately due and payable, and may pursue any remedy available under applicable law, including referral to collections.');
+  heading(T.s7);
+  para(T.default_);
 
-  heading('8. GOVERNING LAW');
-  para('This Agreement shall be governed by the laws of the State of ' + (lender.estado==='NV'?'Nevada':lender.estado) + ', without regard to its conflict-of-laws principles, EXCEPT to the extent that the mandatory consumer-protection or usury laws of Borrower\'s state of residence apply and cannot be waived by contract, in which case such laws shall govern to that limited extent.');
+  heading(T.s8);
+  para(T.governing(lender.estado==='NV' ? (lang==='es'?'Nevada':'Nevada') : lender.estado));
 
-  heading('9. ELECTRONIC SIGNATURES / ENTIRE AGREEMENT');
-  para('This Agreement constitutes the entire understanding between the parties. The parties agree that electronic or typed signatures below are intended to have the same legal effect as handwritten signatures, pursuant to the federal ESIGN Act. If any provision of this Agreement is held unenforceable, the remaining provisions remain in full force.');
+  heading(T.s9);
+  para(T.entire);
 
   ensureSpace(90);
   y += 20;
@@ -916,16 +1139,16 @@ function generateContractPDF(loanId){
   doc.line(marginX+260, y, marginX+460, y);
   y += 12;
   doc.setFontSize(9);
-  doc.text('Lender Signature: ' + (lender.nombre||''), marginX, y);
-  doc.text('Date: ______________', marginX+260, y);
+  doc.text(T.lenderSig(lender.nombre), marginX, y);
+  doc.text(T.dateLine, marginX+260, y);
   y += 30;
   doc.line(marginX, y, marginX+200, y);
   doc.line(marginX+260, y, marginX+460, y);
   y += 12;
-  doc.text('Borrower Signature: ' + (client ? client.nombre : ''), marginX, y);
-  doc.text('Date: ______________', marginX+260, y);
+  doc.text(T.borrowerSig(client ? client.nombre : ''), marginX, y);
+  doc.text(T.dateLine, marginX+260, y);
 
-  doc.save('Contrato-' + loan.folio + '.pdf');
+  doc.save(T.fname + loan.folio + (lang==='es' ? '-ES' : '-EN') + '.pdf');
 }
 
 /* ============ MISC UI ============ */
