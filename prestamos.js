@@ -33,7 +33,7 @@ function montoCategoria(monto){
   return 'D';
 }
 function generateClientCodigo(nombre, anioNacimiento, estado){
-  const prefix = nameInitials(nombre) + String(anioNacimiento).slice(-2) + estado;
+  const prefix = nameInitials(nombre) + String(anioNacimiento||0).padStart(2,'0').slice(-2) + (estado||'NV');
   let codigo;
   do { codigo = prefix + randomDigits(5); } while(state.clients.some(c => c.codigo === codigo));
   return codigo;
@@ -65,6 +65,30 @@ function loadState(){
     const raw = localStorage.getItem(STORAGE_KEY);
     if(raw) state = Object.assign(defaultState(), JSON.parse(raw));
   } catch(e){ state = defaultState(); }
+  migrateState();
+}
+/* Backfills fields/IDs added after some clients/loans already existed on a
+   device, so older saved data doesn't crash newer code and picks up the
+   new ID formats automatically. */
+function migrateState(){
+  for(const loan of state.loans){
+    for(const c of loan.cuotas){
+      if(!Array.isArray(c.pagos)) c.pagos = [];
+    }
+  }
+  for(const client of state.clients){
+    if(!Array.isArray(client.historialDirecciones)) client.historialDirecciones = [];
+    if(/^\d{6}$/.test(client.codigo || '')){
+      client.codigo = generateClientCodigo(client.nombre, client.anioNacimiento || 0, client.estado || 'NV');
+    }
+  }
+  for(const loan of state.loans){
+    if(/^P-[A-Z0-9]{6}$/.test(loan.folio || '')){
+      const client = state.clients.find(c => c.id === loan.clientId);
+      loan.folio = generateLoanFolio((client && client.estado) || 'NV', loan.fechaInicio, loan.principal);
+    }
+  }
+  saveState();
 }
 
 /* ============ HASH ============ */
@@ -765,6 +789,7 @@ async function confirmPayment(){
   if(!payCtx) return;
   const loan = state.loans.find(l => l.id === payCtx.loanId);
   const c = loan.cuotas.find(x => x.numero === payCtx.numero);
+  if(!Array.isArray(c.pagos)) c.pagos = [];
   const fecha = document.getElementById('pay_fecha').value;
   const monto = round2(parseFloat(document.getElementById('pay_montoPagado').value) || 0);
   const metodo = document.getElementById('pay_metodo').value;
@@ -790,7 +815,7 @@ async function undoPayment(loanId, numero){
   if(!confirm('¿Deshacer este pago y marcar la cuota como pendiente de nuevo?')) return;
   const loan = state.loans.find(l => l.id === loanId);
   const c = loan.cuotas.find(x => x.numero === numero);
-  c.pagos.pop();
+  if(Array.isArray(c.pagos)) c.pagos.pop();
   c.estatus = 'pendiente'; c.fechaPago = null; c.montoPagado = 0; c.metodoPago = '';
   await saveState();
   renderLoanDetail();
