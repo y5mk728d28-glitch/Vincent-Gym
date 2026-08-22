@@ -32,6 +32,10 @@ function montoCategoria(monto){
   if(monto < 10000) return 'M';
   return 'D';
 }
+function clientBirthYear(client){
+  if(client.fechaNacimiento){ const d = parseDate(client.fechaNacimiento); if(d) return d.getFullYear(); }
+  return client.anioNacimiento || 0;
+}
 function generateClientCodigo(nombre, anioNacimiento, estado){
   const prefix = nameInitials(nombre) + String(anioNacimiento||0).padStart(2,'0').slice(-2) + (estado||'NV');
   let codigo;
@@ -79,7 +83,7 @@ function migrateState(){
   for(const client of state.clients){
     if(!Array.isArray(client.historialDirecciones)) client.historialDirecciones = [];
     if(/^\d{6}$/.test(client.codigo || '')){
-      client.codigo = generateClientCodigo(client.nombre, client.anioNacimiento || 0, client.estado || 'NV');
+      client.codigo = generateClientCodigo(client.nombre, clientBirthYear(client), client.estado || 'NV');
     }
   }
   for(const loan of state.loans){
@@ -354,7 +358,7 @@ function openClientModal(clientId){
   document.getElementById('c_direccion').value = c ? c.direccion : '';
   document.getElementById('c_ciudad').value = c ? c.ciudad : '';
   document.getElementById('c_estado').value = c ? c.estado : 'NV';
-  document.getElementById('c_anioNacimiento').value = c ? (c.anioNacimiento || '') : '';
+  document.getElementById('c_fechaNacimiento').value = c ? (c.fechaNacimiento || (c.anioNacimiento ? c.anioNacimiento + '-01-01' : '')) : '';
   document.getElementById('c_codigo').value = c ? c.codigo : '';
   document.getElementById('c_pin').value = '';
   document.getElementById('c_pinLabel').textContent = c ? 'Nuevo PIN (opcional)' : 'PIN de acceso del cliente (4 dígitos)';
@@ -364,10 +368,19 @@ function openClientModal(clientId){
 }
 function closeClientModal(){ document.getElementById('clientModalOverlay').classList.remove('show'); }
 
+function regenerateClientCodigoField(){
+  const nombre = document.getElementById('c_nombre').value.trim();
+  const fechaNacimiento = document.getElementById('c_fechaNacimiento').value;
+  const estado = document.getElementById('c_estado').value;
+  if(!nombre || !fechaNacimiento){ showToast('Completa nombre y fecha de nacimiento primero'); return; }
+  const anio = parseDate(fechaNacimiento).getFullYear();
+  document.getElementById('c_codigo').value = generateClientCodigo(nombre, anio, estado);
+}
+
 async function saveClient(){
   const nombre = document.getElementById('c_nombre').value.trim();
   const pin = document.getElementById('c_pin').value.trim();
-  const anioNacimiento = parseInt(document.getElementById('c_anioNacimiento').value, 10);
+  const fechaNacimiento = document.getElementById('c_fechaNacimiento').value;
   const estado = document.getElementById('c_estado').value;
   const direccion = document.getElementById('c_direccion').value.trim();
   const ciudad = document.getElementById('c_ciudad').value.trim();
@@ -376,7 +389,9 @@ async function saveClient(){
   const notas = document.getElementById('c_notas').value.trim();
   const codigoInput = document.getElementById('c_codigo').value.trim().toUpperCase();
   if(!nombre){ showToast('Ingresa el nombre del cliente'); return; }
-  if(!(anioNacimiento >= 1900 && anioNacimiento <= new Date().getFullYear())){ showToast('Ingresa un año de nacimiento válido'); return; }
+  const fechaNacDate = fechaNacimiento ? parseDate(fechaNacimiento) : null;
+  if(!fechaNacDate || fechaNacDate > new Date() || fechaNacDate.getFullYear() < 1900){ showToast('Ingresa una fecha de nacimiento válida'); return; }
+  const anioNacimiento = fechaNacDate.getFullYear();
 
   const editing = editingClientId ? state.clients.find(c => c.id === editingClientId) : null;
   if(!editing && !/^\d{4}$/.test(pin)){ showToast('El PIN del cliente debe ser de 4 dígitos'); return; }
@@ -395,7 +410,7 @@ async function saveClient(){
       editing.historialDirecciones = editing.historialDirecciones || [];
       editing.historialDirecciones.push({ direccion: editing.direccion, ciudad: editing.ciudad, estado: editing.estado, fecha: localDateStr() });
     }
-    Object.assign(editing, { nombre, telefono, email, direccion, ciudad, estado, anioNacimiento, notas, codigo });
+    Object.assign(editing, { nombre, telefono, email, direccion, ciudad, estado, fechaNacimiento, notas, codigo });
     if(pin) editing.pinHash = await hashPin(pin);
     await saveState();
     closeClientModal();
@@ -406,7 +421,7 @@ async function saveClient(){
   }
 
   const client = {
-    id: uid(), nombre, telefono, email, direccion, ciudad, estado, anioNacimiento, notas,
+    id: uid(), nombre, telefono, email, direccion, ciudad, estado, fechaNacimiento, notas,
     codigo, pinHash: await hashPin(pin),
     historialDirecciones: [],
     createdAt: Date.now()
@@ -549,7 +564,7 @@ function renderClientDetail(){
       <div class="item-meta-item">📞 ${escapeHtml(client.telefono || '—')}</div>
       <div class="item-meta-item">✉️ ${escapeHtml(client.email || '—')}</div>
       <div class="item-meta-item">📍 ${escapeHtml(client.direccion || '—')}, ${escapeHtml(client.ciudad || '—')}, ${client.estado || '—'}</div>
-      <div class="item-meta-item">🎂 ${client.anioNacimiento || '—'}</div>
+      <div class="item-meta-item">🎂 ${client.fechaNacimiento ? formatDateEs(client.fechaNacimiento) : (client.anioNacimiento || '—')}</div>
       ${client.notas ? `<div class="item-meta-item">📝 ${escapeHtml(client.notas)}</div>` : ''}
     </div>`;
 
@@ -740,12 +755,17 @@ function renderLoanDetail(){
   wrap.innerHTML = loan.cuotas.map(c => {
     const est = cuotaEstatus(c);
     const monto = est === 'cobrado' ? c.montoPagado : montoAPagar(c);
-    return `<div class="cuota-row" onclick="${est==='cobrado' ? `undoPayment('${loan.id}',${c.numero})` : `openPayModal('${loan.id}',${c.numero})`}">
+    const hasHistory = c.pagos && c.pagos.length > 0;
+    const editIcon = (hasHistory && est !== 'cobrado')
+      ? `<button class="mini-btn" style="flex:none;padding:6px 8px;" onclick="event.stopPropagation();openEditPaidModal('${loan.id}',${c.numero})">✏️</button>`
+      : '';
+    return `<div class="cuota-row" onclick="${est==='cobrado' ? `openEditPaidModal('${loan.id}',${c.numero})` : `openPayModal('${loan.id}',${c.numero})`}">
       <div class="cuota-num">${c.numero}</div>
       <div class="cuota-info">
         <div class="cuota-date">${formatDateEs(c.fechaVencimiento)}</div>
         <div class="cuota-amt">${fmtMoney(monto)}${est==='atrasado' ? ' (con 5% penalidad)' : ''}${renewalHint(c)}</div>
       </div>
+      ${editIcon}
       <span class="status-badge ${est}">${est}</span>
     </div>`;
   }).join('');
@@ -776,7 +796,7 @@ function openPayModal(loanId, numero){
   const est = cuotaEstatus(c);
   payCtx = { loanId, numero };
   document.getElementById('pay_numero').textContent = c.numero;
-  document.getElementById('pay_venc').textContent = formatDateEs(c.fechaVencimiento);
+  document.getElementById('pay_vencInput').value = c.fechaVencimiento;
   document.getElementById('pay_estatus').textContent = est;
   document.getElementById('pay_fecha').value = localDateStr();
   document.getElementById('pay_metodo').value = 'Efectivo';
@@ -785,17 +805,34 @@ function openPayModal(loanId, numero){
 }
 function closePayModal(){ document.getElementById('payModalOverlay').classList.remove('show'); }
 
+async function saveVencimientoOnly(){
+  if(!payCtx) return;
+  const loan = state.loans.find(l => l.id === payCtx.loanId);
+  const c = loan.cuotas.find(x => x.numero === payCtx.numero);
+  const nueva = document.getElementById('pay_vencInput').value;
+  if(!nueva){ showToast('Selecciona una fecha'); return; }
+  c.fechaVencimiento = nueva;
+  await saveState();
+  closePayModal();
+  renderLoanDetail();
+  renderLoans();
+  showToast('Fecha de vencimiento actualizada');
+}
+
 async function confirmPayment(){
   if(!payCtx) return;
   const loan = state.loans.find(l => l.id === payCtx.loanId);
   const c = loan.cuotas.find(x => x.numero === payCtx.numero);
   if(!Array.isArray(c.pagos)) c.pagos = [];
+  const editedVenc = document.getElementById('pay_vencInput').value;
+  if(editedVenc) c.fechaVencimiento = editedVenc;
   const fecha = document.getElementById('pay_fecha').value;
   const monto = round2(parseFloat(document.getElementById('pay_montoPagado').value) || 0);
   const metodo = document.getElementById('pay_metodo').value;
 
   if(currentPayType === 'interest'){
-    c.pagos.push({ fecha, monto, tipo:'interes', metodo });
+    const fechaVencimientoAnterior = c.fechaVencimiento;
+    c.pagos.push({ fecha, monto, tipo:'interes', metodo, fechaVencimientoAnterior });
     c.fechaVencimiento = localDateStr(addDays(todayMidnight(), periodDays(loan)));
     c.estatus = 'pendiente';
   } else {
@@ -815,11 +852,55 @@ async function undoPayment(loanId, numero){
   if(!confirm('¿Deshacer este pago y marcar la cuota como pendiente de nuevo?')) return;
   const loan = state.loans.find(l => l.id === loanId);
   const c = loan.cuotas.find(x => x.numero === numero);
-  if(Array.isArray(c.pagos)) c.pagos.pop();
+  let popped = null;
+  if(Array.isArray(c.pagos)) popped = c.pagos.pop();
+  if(popped && popped.tipo === 'interes' && popped.fechaVencimientoAnterior){
+    c.fechaVencimiento = popped.fechaVencimientoAnterior;
+  }
   c.estatus = 'pendiente'; c.fechaPago = null; c.montoPagado = 0; c.metodoPago = '';
   await saveState();
   renderLoanDetail();
   renderLoans();
+}
+
+/* ============ EDIT LAST PAYMENT ============ */
+let editPaidCtx = null;
+function openEditPaidModal(loanId, numero){
+  const loan = state.loans.find(l => l.id === loanId);
+  const c = loan.cuotas.find(x => x.numero === numero);
+  if(!c.pagos || !c.pagos.length){ showToast('Esta cuota no tiene pagos registrados todavía'); return; }
+  editPaidCtx = { loanId, numero };
+  const p = c.pagos[c.pagos.length - 1];
+  document.getElementById('ep_numero').textContent = c.numero;
+  document.getElementById('ep_tipo').textContent = p.tipo === 'interes' ? 'Solo interés (renovación)' : 'Pago completo';
+  document.getElementById('ep_fecha').value = p.fecha;
+  document.getElementById('ep_monto').value = p.monto;
+  document.getElementById('ep_metodo').value = p.metodo || 'Efectivo';
+  document.getElementById('editPaidModalOverlay').classList.add('show');
+}
+function closeEditPaidModal(){ document.getElementById('editPaidModalOverlay').classList.remove('show'); }
+async function confirmEditPaidPayment(){
+  if(!editPaidCtx) return;
+  const loan = state.loans.find(l => l.id === editPaidCtx.loanId);
+  const c = loan.cuotas.find(x => x.numero === editPaidCtx.numero);
+  const p = c.pagos[c.pagos.length - 1];
+  p.fecha = document.getElementById('ep_fecha').value;
+  p.monto = round2(parseFloat(document.getElementById('ep_monto').value) || 0);
+  p.metodo = document.getElementById('ep_metodo').value;
+  if(c.estatus === 'cobrado' && p.tipo === 'completo'){
+    c.fechaPago = p.fecha; c.montoPagado = p.monto; c.metodoPago = p.metodo;
+  }
+  await saveState();
+  closeEditPaidModal();
+  renderLoanDetail();
+  renderLoans();
+  showToast('Pago actualizado');
+}
+async function undoPaymentFromEdit(){
+  if(!editPaidCtx) return;
+  const { loanId, numero } = editPaidCtx;
+  closeEditPaidModal();
+  await undoPayment(loanId, numero);
 }
 
 /* ============ DASHBOARD ============ */

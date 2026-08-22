@@ -469,9 +469,9 @@ a{color:var(--accent2);}
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Año de nacimiento</label>
-        <input class="form-input" id="c_anioNacimiento" type="number" min="1900" max="2026" placeholder="Ej. 1998">
-        <div class="form-hint">Se usa para generar el ID de cliente permanente (iniciales + año + estado + folio).</div>
+        <label class="form-label">Fecha de nacimiento</label>
+        <input class="form-input" id="c_fechaNacimiento" type="date" min="1900-01-01" max="2026-12-31">
+        <div class="form-hint">El año se usa para el ID de cliente. Si te equivocas, corrígela aquí y toca "Regenerar" abajo.</div>
       </div>
       <div class="form-group">
         <label class="form-label" id="c_pinLabel">PIN de acceso del cliente (4 dígitos)</label>
@@ -480,8 +480,11 @@ a{color:var(--accent2);}
       </div>
       <div class="form-group">
         <label class="form-label">ID de cliente (login)</label>
-        <input class="form-input mono" id="c_codigo" style="text-transform:uppercase" placeholder="Se genera automático al guardar">
-        <div class="form-hint">Formato sugerido: iniciales + año de nacimiento + estado + folio. Déjalo en blanco para generarlo automático, o escribe uno personalizado (debe ser único).</div>
+        <div style="display:flex;gap:8px;">
+          <input class="form-input mono" id="c_codigo" style="flex:1;text-transform:uppercase" placeholder="Se genera automático al guardar">
+          <button class="mini-btn" style="flex:none;padding:0 14px;" onclick="regenerateClientCodigoField()">🔄 Regenerar</button>
+        </div>
+        <div class="form-hint">Formato: iniciales + año de nacimiento + estado + folio. Si corregiste la fecha de nacimiento (o el nombre/estado), toca "Regenerar" para recalcularlo, o escribe uno personalizado (debe ser único). Si ya compartiste el código anterior con el cliente, avísale del cambio.</div>
       </div>
       <div class="form-group">
         <label class="form-label">Notas</label>
@@ -611,11 +614,18 @@ a{color:var(--accent2);}
       </div>
       <div class="preview-box">
         <div class="preview-row"><span>Cuota #</span><b id="pay_numero">—</b></div>
-        <div class="preview-row"><span>Vencimiento</span><b id="pay_venc">—</b></div>
         <div class="preview-row"><span>Estatus</span><b id="pay_estatus">—</b></div>
         <div class="preview-row total"><span id="pay_montoLabel">Monto a cobrar</span><b id="pay_monto">$0</b></div>
       </div>
       <div class="form-hint" id="pay_interestHint" style="display:none;margin-top:8px;">Al confirmar, la cuota se renueva por otro periodo: sigue debiendo el mismo capital + interés en la próxima fecha, y esta renovación queda registrada en su historial.</div>
+      <div class="form-group" style="margin-top:14px;">
+        <label class="form-label">Fecha de vencimiento</label>
+        <div style="display:flex;gap:8px;">
+          <input class="form-input" id="pay_vencInput" type="date" style="flex:1;">
+          <button class="mini-btn" style="flex:none;padding:0 14px;" onclick="saveVencimientoOnly()">Guardar fecha</button>
+        </div>
+        <div class="form-hint">Cambia solo la fecha de vencimiento, sin registrar ningún pago.</div>
+      </div>
       <div class="form-row" style="margin-top:14px;">
         <div class="form-group">
           <label class="form-label">Fecha de pago</label>
@@ -639,6 +649,48 @@ a{color:var(--accent2);}
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closePayModal()">Cancelar</button>
       <button class="btn btn-primary" id="payConfirmBtn" onclick="confirmPayment()">Marcar cobrado</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: Editar último pago ============ -->
+<div class="modal-overlay" id="editPaidModalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Editar pago registrado</div>
+      <button class="modal-close" onclick="closeEditPaidModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="preview-box">
+        <div class="preview-row"><span>Cuota #</span><b id="ep_numero">—</b></div>
+        <div class="preview-row"><span>Tipo</span><b id="ep_tipo">—</b></div>
+      </div>
+      <div class="form-row" style="margin-top:14px;">
+        <div class="form-group">
+          <label class="form-label">Fecha real del pago</label>
+          <input class="form-input" id="ep_fecha" type="date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Monto pagado ($)</label>
+          <input class="form-input" id="ep_monto" type="number" step="0.01">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Método de pago</label>
+        <select class="form-select" id="ep_metodo">
+          <option value="Efectivo">Efectivo</option>
+          <option value="Transferencia">Transferencia</option>
+          <option value="Zelle">Zelle</option>
+          <option value="Otro">Otro</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeEditPaidModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmEditPaidPayment()">Guardar cambios</button>
+    </div>
+    <div style="padding:0 20px 20px;">
+      <button class="btn btn-danger btn-full" onclick="undoPaymentFromEdit()">🗑️ Deshacer este pago (marcar pendiente)</button>
     </div>
   </div>
 </div>
