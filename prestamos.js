@@ -94,6 +94,7 @@ function migrateState(){
   for(const loan of state.loans){
     for(const c of loan.cuotas){
       if(!Array.isArray(c.pagos)) c.pagos = [];
+      if(!Array.isArray(c.ajustes)) c.ajustes = [];
     }
   }
   for(const client of state.clients){
@@ -162,7 +163,7 @@ function buildSchedule(loan){
       cuotas.push({
         numero:i, fechaVencimiento: localDateStr(venc),
         capital, interes: interesPeriodo, montoBase: round2(capital + interesPeriodo),
-        estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[]
+        estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[], ajustes:[]
       });
     }
   } else {
@@ -179,7 +180,7 @@ function buildSchedule(loan){
       cuotas.push({
         numero:i, fechaVencimiento: localDateStr(venc),
         capital, interes, montoBase: round2(capital + interes),
-        estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[]
+        estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[], ajustes:[]
       });
     }
   }
@@ -212,9 +213,13 @@ function cuotaEstatus(cuota){
   if(venc < todayMidnight()) return 'atrasado';
   return 'pendiente';
 }
+function cuotaAjustesTotal(cuota){
+  return round2((cuota.ajustes||[]).reduce((s,a) => s + a.monto, 0));
+}
 function montoAPagar(cuota){
   const est = cuotaEstatus(cuota);
-  return est === 'atrasado' ? round2(cuota.montoBase * (1+PENALTY_RATE)) : cuota.montoBase;
+  const base = est === 'atrasado' ? round2(cuota.montoBase * (1+PENALTY_RATE)) : cuota.montoBase;
+  return Math.max(0, round2(base + cuotaAjustesTotal(cuota)));
 }
 function interesAPagar(cuota){
   const est = cuotaEstatus(cuota);
@@ -222,6 +227,11 @@ function interesAPagar(cuota){
 }
 function cuotaPagosTotal(cuota){
   return round2((cuota.pagos||[]).reduce((s,p) => s + p.monto, 0));
+}
+function ajusteHint(cuota){
+  const total = cuotaAjustesTotal(cuota);
+  if(!total || cuota.estatus === 'cobrado') return '';
+  return ` · 🎁 ajuste ${total<0?'-':'+'}${fmtMoney(Math.abs(total))}`;
 }
 function renewalHint(cuota){
   const n = (cuota.pagos||[]).filter(p => p.tipo === 'interes').length;
@@ -794,13 +804,17 @@ function renderLoanDetail(){
     const editIcon = (hasHistory && est !== 'cobrado')
       ? `<button class="mini-btn" style="flex:none;padding:6px 8px;" onclick="event.stopPropagation();openEditPaidModal('${loan.id}',${c.numero})">✏️</button>`
       : '';
+    const adjustIcon = (est !== 'cobrado')
+      ? `<button class="mini-btn" style="flex:none;padding:6px 8px;" onclick="event.stopPropagation();openAdjustModal('${loan.id}',${c.numero})">🎁</button>`
+      : '';
     return `<div class="cuota-row" onclick="${est==='cobrado' ? `openEditPaidModal('${loan.id}',${c.numero})` : `openPayModal('${loan.id}',${c.numero})`}">
       <div class="cuota-num">${c.numero}</div>
       <div class="cuota-info">
         <div class="cuota-date">${formatDateEs(c.fechaVencimiento)}</div>
-        <div class="cuota-amt">${fmtMoney(monto)}${est==='atrasado' ? ' (con 5% penalidad)' : ''}${renewalHint(c)}</div>
+        <div class="cuota-amt">${fmtMoney(monto)}${est==='atrasado' ? ' (con 5% penalidad)' : ''}${renewalHint(c)}${ajusteHint(c)}</div>
       </div>
       ${editIcon}
+      ${adjustIcon}
       <span class="status-badge ${est}">${est}</span>
     </div>`;
   }).join('');
@@ -938,6 +952,81 @@ async function undoPaymentFromEdit(){
   await undoPayment(loanId, numero);
 }
 
+/* ============ MANUAL ADJUSTMENTS (fee waivers, promos, interest-free periods, etc.) ============ */
+let adjustCtx = null;
+function openAdjustModal(loanId, numero){
+  const loan = state.loans.find(l => l.id === loanId);
+  const c = loan.cuotas.find(x => x.numero === numero);
+  if(!Array.isArray(c.ajustes)) c.ajustes = [];
+  adjustCtx = { loanId, numero };
+  document.getElementById('adj_numero').textContent = c.numero;
+  document.getElementById('adj_montoActual').textContent = fmtMoney(montoAPagar(c));
+  document.getElementById('adj_monto').value = '';
+  document.getElementById('adj_motivo').value = '';
+  renderAdjustHistory();
+  document.getElementById('adjustModalOverlay').classList.add('show');
+}
+function closeAdjustModal(){ document.getElementById('adjustModalOverlay').classList.remove('show'); }
+function prefillAdjust(type){
+  if(!adjustCtx) return;
+  const loan = state.loans.find(l => l.id === adjustCtx.loanId);
+  const c = loan.cuotas.find(x => x.numero === adjustCtx.numero);
+  if(type === 'penalidad'){
+    document.getElementById('adj_monto').value = -round2(c.montoBase * PENALTY_RATE);
+    document.getElementById('adj_motivo').value = 'Condonación de penalidad por atraso';
+  } else if(type === 'interes'){
+    document.getElementById('adj_monto').value = -c.interes;
+    document.getElementById('adj_motivo').value = 'Promoción: sin interés este período';
+  }
+}
+async function confirmAdjust(){
+  if(!adjustCtx) return;
+  const loan = state.loans.find(l => l.id === adjustCtx.loanId);
+  const c = loan.cuotas.find(x => x.numero === adjustCtx.numero);
+  const monto = round2(parseFloat(document.getElementById('adj_monto').value) || 0);
+  const motivo = document.getElementById('adj_motivo').value.trim();
+  if(!monto){ showToast('Ingresa un monto de ajuste distinto de cero'); return; }
+  if(!motivo){ showToast('Ingresa un motivo para el ajuste'); return; }
+  if(!Array.isArray(c.ajustes)) c.ajustes = [];
+  c.ajustes.push({ fecha: localDateStr(), monto, motivo });
+  await saveState();
+  document.getElementById('adj_monto').value = '';
+  document.getElementById('adj_motivo').value = '';
+  document.getElementById('adj_montoActual').textContent = fmtMoney(montoAPagar(c));
+  renderAdjustHistory();
+  renderLoanDetail();
+  renderLoans();
+  showToast('Ajuste aplicado');
+}
+function renderAdjustHistory(){
+  if(!adjustCtx) return;
+  const loan = state.loans.find(l => l.id === adjustCtx.loanId);
+  const c = loan.cuotas.find(x => x.numero === adjustCtx.numero);
+  const list = c.ajustes || [];
+  document.getElementById('adj_history').innerHTML = list.length ? list.map((a,i) => `
+    <div class="item-card" style="padding:10px 12px;">
+      <div class="item-top">
+        <div class="item-sub">${formatDateEs(a.fecha)} · ${escapeHtml(a.motivo)}</div>
+        <b class="mono" style="color:${a.monto<0?'var(--good)':'var(--danger)'}">${a.monto<0?'-':'+'}${fmtMoney(Math.abs(a.monto))}</b>
+      </div>
+      <div class="item-actions">
+        <button class="mini-btn danger" onclick="removeAdjust(${i})">🗑️ Quitar este ajuste</button>
+      </div>
+    </div>
+  `).join('') : '<div class="form-hint">Sin ajustes todavía.</div>';
+}
+async function removeAdjust(index){
+  if(!adjustCtx) return;
+  const loan = state.loans.find(l => l.id === adjustCtx.loanId);
+  const c = loan.cuotas.find(x => x.numero === adjustCtx.numero);
+  c.ajustes.splice(index, 1);
+  await saveState();
+  document.getElementById('adj_montoActual').textContent = fmtMoney(montoAPagar(c));
+  renderAdjustHistory();
+  renderLoanDetail();
+  renderLoans();
+}
+
 /* ============ DASHBOARD ============ */
 function renderDashboard(){
   document.getElementById('todayDate').textContent = new Date().toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
@@ -1003,7 +1092,7 @@ function renderClientView(){
       const monto = est === 'cobrado' ? c.montoPagado : montoAPagar(c);
       return `<div class="cuota-row" style="margin:0 0 8px;">
         <div class="cuota-num">${c.numero}</div>
-        <div class="cuota-info"><div class="cuota-date">${formatDateEs(c.fechaVencimiento)}</div><div class="cuota-amt">${fmtMoney(monto)}${est==='atrasado' ? ' (con 5% penalidad)' : ''}${renewalHint(c)}</div></div>
+        <div class="cuota-info"><div class="cuota-date">${formatDateEs(c.fechaVencimiento)}</div><div class="cuota-amt">${fmtMoney(monto)}${est==='atrasado' ? ' (con 5% penalidad)' : ''}${renewalHint(c)}${ajusteHint(c)}</div></div>
         <span class="status-badge ${est}">${est}</span>
       </div>`;
     }).join('');
