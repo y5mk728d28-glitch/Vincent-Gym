@@ -53,7 +53,7 @@ function generateLoanFolio(estado, fechaInicio, principal){
 /* ============ STATE & PERSISTENCE ============ */
 function defaultState(){
   return {
-    setup: { done:false, adminPinHash:null, lender:{ nombre:'', direccion:'', ciudad:'', estado:'NV' } },
+    admins: [],
     clients: [],
     loans: []
   };
@@ -75,6 +75,22 @@ function loadState(){
    device, so older saved data doesn't crash newer code and picks up the
    new ID formats automatically. */
 function migrateState(){
+  /* old single-admin `state.setup` -> `state.admins[]` (single-device only;
+     real per-admin data isolation is deferred until there's a shared backend) */
+  if(state.setup && !state.admins.length){
+    const lender = state.setup.lender || {};
+    state.admins.push({
+      id: uid(),
+      username: 'admin',
+      passwordHash: state.setup.adminPinHash || null,
+      nombre: lender.nombre || '',
+      direccion: lender.direccion || '',
+      ciudad: lender.ciudad || '',
+      estado: lender.estado || 'NV',
+      createdAt: Date.now()
+    });
+  }
+  delete state.setup;
   for(const loan of state.loans){
     for(const c of loan.cuotas){
       if(!Array.isArray(c.pagos)) c.pagos = [];
@@ -231,27 +247,38 @@ function loanIsLate(loan){
 }
 
 /* ============ AUTH / SESSION ============ */
-let session = null; // { role: 'admin' } or { role:'cliente', clientId }
+let session = null; // { role:'admin', adminId } or { role:'cliente', clientId }
 
-function setupNeeded(){ return !state.setup.done; }
+function currentAdmin(){
+  return session && session.role === 'admin' ? state.admins.find(a => a.id === session.adminId) : null;
+}
 
 async function completeSetup(){
+  const username = document.getElementById('su_username').value.trim().toLowerCase();
   const nombre = document.getElementById('su_nombre').value.trim();
   const direccion = document.getElementById('su_direccion').value.trim();
   const ciudad = document.getElementById('su_ciudad').value.trim();
   const estado = document.getElementById('su_estado').value;
-  const pin1 = document.getElementById('su_pin1').value.trim();
-  const pin2 = document.getElementById('su_pin2').value.trim();
+  const pin1 = document.getElementById('su_pin1').value;
+  const pin2 = document.getElementById('su_pin2').value;
   const err = document.getElementById('su_error');
   err.textContent = '';
+  if(!username){ err.textContent = 'Ingresa un usuario.'; return; }
+  if(state.admins.some(a => a.username.toLowerCase() === username)){ err.textContent = 'Ese usuario ya existe.'; return; }
   if(!nombre){ err.textContent = 'Ingresa tu nombre.'; return; }
-  if(!/^\d{4,6}$/.test(pin1)){ err.textContent = 'El PIN debe tener entre 4 y 6 dígitos.'; return; }
-  if(pin1 !== pin2){ err.textContent = 'Los PIN no coinciden.'; return; }
-  state.setup.lender = { nombre, direccion, ciudad, estado };
-  state.setup.adminPinHash = await hashPin(pin1);
-  state.setup.done = true;
+  if(pin1.length < 4){ err.textContent = 'La contraseña debe tener al menos 4 caracteres.'; return; }
+  if(pin1 !== pin2){ err.textContent = 'Las contraseñas no coinciden.'; return; }
+  const admin = {
+    id: uid(), username,
+    passwordHash: await hashPin(pin1),
+    nombre, direccion, ciudad, estado,
+    createdAt: Date.now()
+  };
+  state.admins.push(admin);
   await saveState();
-  showLoginView();
+  session = { role:'admin', adminId: admin.id };
+  sessionStorage.setItem('vl_session', JSON.stringify(session));
+  showAdminView();
 }
 
 function setLoginTab(tab){
@@ -263,12 +290,16 @@ function setLoginTab(tab){
 }
 
 async function loginAdmin(){
-  const pin = document.getElementById('li_adminPin').value.trim();
+  const username = document.getElementById('li_adminUser').value.trim().toLowerCase();
+  const pin = document.getElementById('li_adminPin').value;
   const err = document.getElementById('li_error');
+  const admin = state.admins.find(a => a.username.toLowerCase() === username);
+  if(!admin){ err.textContent = 'Usuario no encontrado.'; return; }
   const h = await hashPin(pin);
-  if(h !== state.setup.adminPinHash){ err.textContent = 'PIN incorrecto.'; return; }
-  session = { role:'admin' };
+  if(h !== admin.passwordHash){ err.textContent = 'Contraseña incorrecta.'; return; }
+  session = { role:'admin', adminId: admin.id };
   sessionStorage.setItem('vl_session', JSON.stringify(session));
+  document.getElementById('li_adminUser').value = '';
   document.getElementById('li_adminPin').value = '';
   err.textContent = '';
   showAdminView();
@@ -276,12 +307,12 @@ async function loginAdmin(){
 
 async function loginClient(){
   const code = document.getElementById('li_clientCode').value.trim().toUpperCase();
-  const pin = document.getElementById('li_clientPin').value.trim();
+  const pin = document.getElementById('li_clientPin').value;
   const err = document.getElementById('li_error');
   const client = state.clients.find(c => c.codigo === code);
-  if(!client){ err.textContent = 'Código no encontrado.'; return; }
+  if(!client){ err.textContent = 'ID de cliente no encontrado.'; return; }
   const h = await hashPin(pin);
-  if(h !== client.pinHash){ err.textContent = 'PIN incorrecto.'; return; }
+  if(h !== client.pinHash){ err.textContent = 'Contraseña incorrecta.'; return; }
   session = { role:'cliente', clientId: client.id };
   sessionStorage.setItem('vl_session', JSON.stringify(session));
   document.getElementById('li_clientCode').value = '';
@@ -303,10 +334,14 @@ function hideAllViews(){
   document.getElementById('bottomNav').style.display = 'none';
   document.getElementById('mainFab').style.display = 'none';
 }
-function showSetupView(){ hideAllViews(); document.getElementById('view-setup').classList.add('show'); }
+function showSetupView(){
+  hideAllViews();
+  document.getElementById('su_backWrap').style.display = state.admins.length ? '' : 'none';
+  document.getElementById('view-setup').classList.add('show');
+}
 function showLoginView(){
   hideAllViews();
-  document.getElementById('loginBrandTitle').textContent = state.setup.lender.nombre || 'Vincent Bank';
+  document.getElementById('li_noAdminHint').style.display = state.admins.length ? 'none' : '';
   document.getElementById('view-login').classList.add('show');
 }
 function showAdminView(){
@@ -394,8 +429,8 @@ async function saveClient(){
   const anioNacimiento = fechaNacDate.getFullYear();
 
   const editing = editingClientId ? state.clients.find(c => c.id === editingClientId) : null;
-  if(!editing && !/^\d{4}$/.test(pin)){ showToast('El PIN del cliente debe ser de 4 dígitos'); return; }
-  if(editing && pin && !/^\d{4}$/.test(pin)){ showToast('El PIN debe ser de 4 dígitos, o déjalo en blanco para no cambiarlo'); return; }
+  if(!editing && pin.length < 4){ showToast('La contraseña del cliente debe tener al menos 4 caracteres'); return; }
+  if(editing && pin && pin.length < 4){ showToast('La contraseña debe tener al menos 4 caracteres, o déjala en blanco para no cambiarla'); return; }
 
   let codigo;
   if(codigoInput){
@@ -992,35 +1027,48 @@ function renderClientView(){
 
 /* ============ SETTINGS ============ */
 function openSettings(){
-  document.getElementById('s_nombre').value = state.setup.lender.nombre;
-  document.getElementById('s_direccion').value = state.setup.lender.direccion;
-  document.getElementById('s_ciudad').value = state.setup.lender.ciudad;
-  document.getElementById('s_estado').value = state.setup.lender.estado;
+  const admin = currentAdmin();
+  if(!admin) return;
+  document.getElementById('s_nombre').value = admin.nombre;
+  document.getElementById('s_direccion').value = admin.direccion;
+  document.getElementById('s_ciudad').value = admin.ciudad;
+  document.getElementById('s_estado').value = admin.estado;
+  document.getElementById('s_username').value = admin.username;
   document.getElementById('s_newPin1').value = '';
   document.getElementById('s_newPin2').value = '';
   document.getElementById('settingsOverlay').classList.add('show');
 }
 function closeSettings(){ document.getElementById('settingsOverlay').classList.remove('show'); }
 async function saveLenderInfo(){
-  state.setup.lender = {
+  const admin = currentAdmin();
+  if(!admin) return;
+  Object.assign(admin, {
     nombre: document.getElementById('s_nombre').value.trim(),
     direccion: document.getElementById('s_direccion').value.trim(),
     ciudad: document.getElementById('s_ciudad').value.trim(),
     estado: document.getElementById('s_estado').value
-  };
+  });
   await saveState();
   showToast('Datos guardados');
 }
 async function changeAdminPin(){
-  const p1 = document.getElementById('s_newPin1').value.trim();
-  const p2 = document.getElementById('s_newPin2').value.trim();
-  if(!/^\d{4,6}$/.test(p1)){ showToast('El PIN debe tener 4-6 dígitos'); return; }
-  if(p1 !== p2){ showToast('Los PIN no coinciden'); return; }
-  state.setup.adminPinHash = await hashPin(p1);
+  const admin = currentAdmin();
+  if(!admin) return;
+  const newUsername = document.getElementById('s_username').value.trim().toLowerCase();
+  const p1 = document.getElementById('s_newPin1').value;
+  const p2 = document.getElementById('s_newPin2').value;
+  if(!newUsername){ showToast('El usuario no puede estar vacío'); return; }
+  if(state.admins.some(a => a.username.toLowerCase() === newUsername && a.id !== admin.id)){ showToast('Ese usuario ya está en uso'); return; }
+  if(p1 || p2){
+    if(p1.length < 4){ showToast('La contraseña debe tener al menos 4 caracteres'); return; }
+    if(p1 !== p2){ showToast('Las contraseñas no coinciden'); return; }
+    admin.passwordHash = await hashPin(p1);
+  }
+  admin.username = newUsername;
   await saveState();
   document.getElementById('s_newPin1').value = '';
   document.getElementById('s_newPin2').value = '';
-  showToast('PIN actualizado');
+  showToast('Usuario/contraseña actualizados');
 }
 function exportData(){
   const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
@@ -1126,7 +1174,7 @@ function generateContractPDF(loanId, lang){
   if(!loan) return;
   const freqLabel = (lang === 'es' ? CONTRACT_FREQ_ES : CONTRACT_FREQ_EN)[loan.frecuencia];
   const client = state.clients.find(c => c.id === loan.clientId);
-  const lender = state.setup.lender;
+  const lender = currentAdmin() || state.admins[0] || {};
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit:'pt', format:'letter' });
   const pageW = doc.internal.pageSize.getWidth();
@@ -1300,14 +1348,12 @@ function init(){
   loadState();
   populateStateSelects();
 
-  if(setupNeeded()){ showSetupView(); return; }
-
   try {
     const raw = sessionStorage.getItem('vl_session');
     if(raw) session = JSON.parse(raw);
   } catch(e){}
 
-  if(session && session.role === 'admin'){ showAdminView(); }
+  if(session && session.role === 'admin' && state.admins.some(a => a.id === session.adminId)){ showAdminView(); }
   else if(session && session.role === 'cliente' && state.clients.some(c => c.id === session.clientId)){ showClientView(); }
   else { showLoginView(); }
 
