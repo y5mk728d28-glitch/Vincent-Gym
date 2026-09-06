@@ -7,15 +7,15 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="theme-color" content="#060907">
-<meta name="build-version" content="2026-08-20-01">
+<meta name="build-version" content="2026-08-20-02">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Vincent Bank">
-<link rel="apple-touch-icon" href="logo.png?v=2026-08-20-01">
-<link rel="icon" href="logo.png?v=2026-08-20-01">
+<link rel="apple-touch-icon" href="logo.png?v=2026-08-20-02">
+<link rel="icon" href="logo.png?v=2026-08-20-02">
 <title>Vincent Bank — Préstamos</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="jspdf.umd.min.js?v=2026-08-20-01"></script>
+<script src="jspdf.umd.min.js?v=2026-08-20-02"></script>
 <style>
 :root{
   --bg:#060907;
@@ -212,7 +212,7 @@ a{color:var(--accent2);}
   <div class="center-wrap">
     <div class="auth-card">
       <div id="su_backWrap" style="margin-bottom:10px;display:none;"><button class="mini-btn" style="flex:none;padding:6px 12px;" onclick="showLoginView()">← Volver</button></div>
-      <div class="auth-logo"><img src="logo.png?v=2026-08-20-01" alt="Vincent Bank"></div>
+      <div class="auth-logo"><img src="logo.png?v=2026-08-20-02" alt="Vincent Bank"></div>
       <div class="auth-title">Crear cuenta de administrador</div>
       <div class="auth-sub">Usuario, datos del prestamista y contraseña</div>
       <div class="form-group">
@@ -258,7 +258,7 @@ a{color:var(--accent2);}
 <div class="view" id="view-login">
   <div class="center-wrap">
     <div class="auth-card">
-      <div class="auth-logo"><img src="logo.png?v=2026-08-20-01" alt="Vincent Bank"></div>
+      <div class="auth-logo"><img src="logo.png?v=2026-08-20-02" alt="Vincent Bank"></div>
       <div class="auth-title">Vincent Bank</div>
       <div class="auth-sub">Selecciona cómo quieres entrar</div>
       <div class="tabs-row">
@@ -299,7 +299,7 @@ a{color:var(--accent2);}
 <!-- ============ ADMIN APP ============ -->
 <div class="view" id="view-admin">
   <header class="topbar">
-    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-08-20-01" alt="Vincent Bank"></span><span class="brand-name">Vincent Bank</span></div>
+    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-08-20-02" alt="Vincent Bank"></span><span class="brand-name">Vincent Bank</span></div>
     <div class="topbar-actions">
       <button class="icon-btn" onclick="openSettings()">⚙️</button>
     </div>
@@ -428,7 +428,7 @@ a{color:var(--accent2);}
 <!-- ============ CLIENT APP ============ -->
 <div class="view" id="view-client">
   <header class="topbar">
-    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-08-20-01" alt="Vincent Bank"></span><span class="brand-name" id="clientBrandName">Vincent Bank</span></div>
+    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-08-20-02" alt="Vincent Bank"></span><span class="brand-name" id="clientBrandName">Vincent Bank</span></div>
     <div class="topbar-actions"><button class="icon-btn" onclick="logout()">🚪</button></div>
   </header>
   <div style="padding:6px 18px;">
@@ -708,6 +708,41 @@ a{color:var(--accent2);}
   </div>
 </div>
 
+<!-- ============ MODAL: Ajuste manual ============ -->
+<div class="modal-overlay" id="adjustModalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Ajuste manual</div>
+      <button class="modal-close" onclick="closeAdjustModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="preview-box">
+        <div class="preview-row"><span>Cuota #</span><b id="adj_numero">—</b></div>
+        <div class="preview-row total"><span>Monto actual a cobrar</span><b id="adj_montoActual">$0</b></div>
+      </div>
+      <div class="form-hint" style="margin:10px 0;">Un monto negativo reduce lo que debe (perdón, descuento, promoción). Un monto positivo lo aumenta.</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button class="mini-btn" style="padding:10px 8px;" onclick="prefillAdjust('penalidad')">🎁 Condonar penalidad</button>
+        <button class="mini-btn" style="padding:10px 8px;" onclick="prefillAdjust('interes')">🎁 Sin interés este período</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Monto del ajuste ($)</label>
+        <input class="form-input" id="adj_monto" type="number" step="0.01" placeholder="Ej. -50">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Motivo</label>
+        <input class="form-input" id="adj_motivo" placeholder="Ej. Promoción, cliente frecuente, disculpa por...">
+      </div>
+      <div class="section-title" style="padding:0;">Ajustes ya aplicados a esta cuota</div>
+      <div id="adj_history"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeAdjustModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmAdjust()">Aplicar ajuste</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ MODAL: Ajustes ============ -->
 <div class="modal-overlay" id="settingsOverlay">
   <div class="modal">
@@ -782,6 +817,6 @@ a{color:var(--accent2);}
 
 <div class="toast" id="toast"></div>
 
-<script src="prestamos.js?v=2026-08-20-01"></script>
+<script src="prestamos.js?v=2026-08-20-02"></script>
 </body>
 </html>
