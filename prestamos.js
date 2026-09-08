@@ -62,7 +62,7 @@ let state = defaultState();
 
 async function saveState(){
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-  catch(e){ console.error('save failed', e); showToast('⚠️ No se pudo guardar — exporta un respaldo'); }
+  catch(e){ console.error('save failed', e); showToast('<svg class="icon"><use href="#i-warning"/></svg> No se pudo guardar — exporta un respaldo'); }
 }
 function loadState(){
   try {
@@ -271,18 +271,18 @@ function cuotaPagosTotal(cuota){
 function ajusteHint(cuota){
   const total = cuotaAjustesTotal(cuota);
   if(!total || cuota.estatus === 'cobrado') return '';
-  return ` · 🎁 ajuste ${total<0?'-':'+'}${fmtMoney(Math.abs(total))}`;
+  return ` · <svg class="icon icon-sm"><use href="#i-gift"/></svg> ajuste ${total<0?'-':'+'}${fmtMoney(Math.abs(total))}`;
 }
 function partialInterestHint(cuota){
   const abonado = cuota.interesAbonado || 0;
   if(!abonado || cuota.estatus === 'cobrado') return '';
   const falta = Math.max(0, round2(interesRequeridoTotal(cuota) - abonado));
-  return ` · 💰 abonó ${fmtMoney(abonado)} de interés — faltan ${fmtMoney(falta)} este período`;
+  return ` · <svg class="icon icon-sm"><use href="#i-coins"/></svg> abonó ${fmtMoney(abonado)} de interés — faltan ${fmtMoney(falta)} este período`;
 }
 function renewalHint(cuota){
   const n = (cuota.pagos||[]).filter(p => p.tipo === 'interes' && p.renovacionCompleta !== false).length;
   if(!n || cuota.estatus === 'cobrado') return '';
-  return ` · 🔄 ${n} renovación${n>1?'es':''} (${fmtMoney(cuotaPagosTotal(cuota))} cobrado)`;
+  return ` · <svg class="icon icon-sm"><use href="#i-renew"/></svg> ${n} renovación${n>1?'es':''} (${fmtMoney(cuotaPagosTotal(cuota))} cobrado)`;
 }
 
 function loanTotals(loan){
@@ -556,13 +556,13 @@ function renderClients(){
         <span class="status-badge ${score.color}">${score.score}</span>
       </div>
       <div class="item-meta">
-        ${c.telefono ? `<div class="item-meta-item">📞 ${escapeHtml(c.telefono)}</div>` : ''}
-        ${c.estado ? `<div class="item-meta-item">📍 ${escapeHtml(c.ciudad||'')} ${c.estado}</div>` : ''}
+        ${c.telefono ? `<div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-phone"/></svg> ${escapeHtml(c.telefono)}</div>` : ''}
+        ${c.estado ? `<div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-pin"/></svg> ${escapeHtml(c.ciudad||'')} ${c.estado}</div>` : ''}
       </div>
       <div class="item-actions" onclick="event.stopPropagation()">
-        <button class="mini-btn primary" onclick="openClientDetail('${c.id}')">👤 Ver detalle</button>
+        <button class="mini-btn primary" onclick="openClientDetail('${c.id}')"><svg class="icon"><use href="#i-user"/></svg> Ver detalle</button>
         <button class="mini-btn" onclick="openLoanModalFor('${c.id}')">+ Préstamo</button>
-        <button class="mini-btn danger" onclick="deleteClient('${c.id}')">🗑️</button>
+        <button class="mini-btn danger" onclick="deleteClient('${c.id}')"><svg class="icon"><use href="#i-trash"/></svg></button>
       </div>
     </div>`;
   }).join('');
@@ -652,11 +652,11 @@ function renderClientDetail(){
 
   document.getElementById('cd_infoCard').innerHTML = `
     <div class="item-meta" style="flex-direction:column;gap:8px;align-items:flex-start;">
-      <div class="item-meta-item">📞 ${escapeHtml(client.telefono || '—')}</div>
-      <div class="item-meta-item">✉️ ${escapeHtml(client.email || '—')}</div>
-      <div class="item-meta-item">📍 ${escapeHtml(client.direccion || '—')}, ${escapeHtml(client.ciudad || '—')}, ${client.estado || '—'}</div>
-      <div class="item-meta-item">🎂 ${client.fechaNacimiento ? formatDateEs(client.fechaNacimiento) : (client.anioNacimiento || '—')}</div>
-      ${client.notas ? `<div class="item-meta-item">📝 ${escapeHtml(client.notas)}</div>` : ''}
+      <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-phone"/></svg> ${escapeHtml(client.telefono || '—')}</div>
+      <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-mail"/></svg> ${escapeHtml(client.email || '—')}</div>
+      <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-pin"/></svg> ${escapeHtml(client.direccion || '—')}, ${escapeHtml(client.ciudad || '—')}, ${client.estado || '—'}</div>
+      <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-cake"/></svg> ${client.fechaNacimiento ? formatDateEs(client.fechaNacimiento) : (client.anioNacimiento || '—')}</div>
+      ${client.notas ? `<div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-doc"/></svg> ${escapeHtml(client.notas)}</div>` : ''}
     </div>`;
 
   const hist = client.historialDirecciones || [];
@@ -672,7 +672,7 @@ function renderClientDetail(){
         <div><div class="item-title">${loan.folio}</div><div class="item-sub">${fmtMoney(loan.principal)} · ${FREQ_LABEL[loan.frecuencia]}</div></div>
         <span class="status-badge ${status}">${status}</span>
       </div>
-      <div class="item-meta"><div class="item-meta-item">💵 Saldo: ${fmtMoney(totals.saldo)}</div></div>
+      <div class="item-meta"><div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-cash"/></svg> Saldo: ${fmtMoney(totals.saldo)}</div></div>
     </div>`;
   }).join('') : '<div class="empty-state" style="padding:20px;"><div>Sin préstamos todavía.</div></div>';
 
@@ -683,7 +683,7 @@ function renderClientDetail(){
         <div><div class="item-title">${fmtMoney(p.monto)}</div><div class="item-sub">${p.folio} · Cuota #${p.numero} · ${p.metodo}</div></div>
         <span class="status-badge ${p.tipo==='interes' ? 'pendiente' : 'cobrado'}">${p.tipo==='interes' ? 'solo interés' : 'completo'}</span>
       </div>
-      <div class="item-meta"><div class="item-meta-item">📅 ${formatDateEs(p.fecha)}</div></div>
+      <div class="item-meta"><div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-calendar"/></svg> ${formatDateEs(p.fecha)}</div></div>
     </div>`).join('') : '<div class="empty-state" style="padding:20px;"><div>Sin pagos registrados todavía.</div></div>';
 }
 
@@ -830,8 +830,8 @@ function renderLoans(){
         <span class="status-badge ${status}">${status}</span>
       </div>
       <div class="item-meta">
-        <div class="item-meta-item">💵 Saldo: ${fmtMoney(totals.saldo)}</div>
-        ${totals.atrasadas ? `<div class="item-meta-item">⏰ ${totals.atrasadas} cuota(s) atrasada(s)</div>` : ''}
+        <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-cash"/></svg> Saldo: ${fmtMoney(totals.saldo)}</div>
+        ${totals.atrasadas ? `<div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-clock"/></svg> ${totals.atrasadas} cuota(s) atrasada(s)</div>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -860,10 +860,10 @@ function renderLoanDetail(){
     const monto = est === 'cobrado' ? c.montoPagado : montoAPagar(c);
     const hasHistory = c.pagos && c.pagos.length > 0;
     const editIcon = (hasHistory && est !== 'cobrado')
-      ? `<button class="mini-btn" style="flex:none;padding:6px 8px;" onclick="event.stopPropagation();openEditPaidModal('${loan.id}',${c.numero})">✏️</button>`
+      ? `<button class="mini-btn" style="flex:none;padding:6px 8px;" onclick="event.stopPropagation();openEditPaidModal('${loan.id}',${c.numero})"><svg class="icon"><use href="#i-edit"/></svg></button>`
       : '';
     const adjustIcon = (est !== 'cobrado')
-      ? `<button class="mini-btn" style="flex:none;padding:6px 8px;" onclick="event.stopPropagation();openAdjustModal('${loan.id}',${c.numero})">🎁</button>`
+      ? `<button class="mini-btn" style="flex:none;padding:6px 8px;" onclick="event.stopPropagation();openAdjustModal('${loan.id}',${c.numero})"><svg class="icon"><use href="#i-gift"/></svg></button>`
       : '';
     return `<div class="cuota-row" onclick="${est==='cobrado' ? `openEditPaidModal('${loan.id}',${c.numero})` : `openPayModal('${loan.id}',${c.numero})`}">
       <div class="cuota-num">${c.numero}</div>
@@ -1084,7 +1084,7 @@ function renderAdjustHistory(){
         <b class="mono" style="color:${a.monto<0?'var(--good)':'var(--danger)'}">${a.monto<0?'-':'+'}${fmtMoney(Math.abs(a.monto))}</b>
       </div>
       <div class="item-actions">
-        <button class="mini-btn danger" onclick="removeAdjust(${i})">🗑️ Quitar este ajuste</button>
+        <button class="mini-btn danger" onclick="removeAdjust(${i})"><svg class="icon"><use href="#i-trash"/></svg> Quitar este ajuste</button>
       </div>
     </div>
   `).join('') : '<div class="form-hint">Sin ajustes todavía.</div>';
@@ -1136,7 +1136,7 @@ function renderDashboard(){
 
   const wrap = document.getElementById('dashUpcomingList');
   if(!upcoming.length){
-    wrap.innerHTML = '<div class="empty-state"><div class="icon">✅</div><div>No hay cuotas próximas ni atrasadas.</div></div>';
+    wrap.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon icon-lg"><use href="#i-check"/></svg></div><div>No hay cuotas próximas ni atrasadas.</div></div>';
     return;
   }
   wrap.innerHTML = upcoming.slice(0,12).map(({loan,client,c,est}) => `
@@ -1146,8 +1146,8 @@ function renderDashboard(){
         <span class="status-badge ${est}">${est}</span>
       </div>
       <div class="item-meta">
-        <div class="item-meta-item">📅 ${formatDateEs(c.fechaVencimiento)}</div>
-        <div class="item-meta-item">💵 ${fmtMoney(montoAPagar(c))}</div>
+        <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-calendar"/></svg> ${formatDateEs(c.fechaVencimiento)}</div>
+        <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-cash"/></svg> ${fmtMoney(montoAPagar(c))}</div>
       </div>
     </div>`).join('');
 }
@@ -1176,13 +1176,13 @@ function renderClientView(){
         <span class="status-badge ${status}">${status}</span>
       </div>
       <div class="item-meta">
-        <div class="item-meta-item">✅ Pagado: ${fmtMoney(totals.pagado)}</div>
-        <div class="item-meta-item">💵 Saldo: ${fmtMoney(totals.saldo)}</div>
+        <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-check"/></svg> Pagado: ${fmtMoney(totals.pagado)}</div>
+        <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-cash"/></svg> Saldo: ${fmtMoney(totals.saldo)}</div>
       </div>
       <div style="margin-top:12px;">${rows}</div>
       <div class="item-actions">
-        <button class="mini-btn primary" onclick="generateContractPDF('${loan.id}','es')">📄 Contrato (Español)</button>
-        <button class="mini-btn primary" onclick="generateContractPDF('${loan.id}','en')">📄 Contract (English)</button>
+        <button class="mini-btn primary" onclick="generateContractPDF('${loan.id}','es')"><svg class="icon"><use href="#i-doc"/></svg> Contrato (Español)</button>
+        <button class="mini-btn primary" onclick="generateContractPDF('${loan.id}','en')"><svg class="icon"><use href="#i-doc"/></svg> Contract (English)</button>
       </div>
     </div>`;
   }).join('');
