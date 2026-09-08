@@ -586,7 +586,7 @@
     padding: 8px 12px; font-family: 'Bebas Neue', sans-serif; font-size: 11.5px;
     letter-spacing: 1px; border-radius: 10px; cursor: pointer; margin-top: auto;
     display: flex; align-items: center; justify-content: space-between;
-    box-shadow: 0 4px 16px rgba(216,31,42,.4);
+    box-shadow: 0 4px 16px var(--accent-soft);
   }
   .h-cta-btn:active { background: #F32635; }
   .h-next-meta { font-size: 9px; color: rgba(255,255,255,.38); font-family: 'DM Mono', monospace; margin-bottom: 2px; position: relative; z-index: 1; }
@@ -667,26 +667,26 @@
   .tab-btn svg { width: 23px; height: 23px; stroke-width: 1.6; }
   .tab-btn.active {
     color: #fff;
-    background: rgba(216,31,42,0.16);
+    background: var(--accent-soft);
   }
   .tab-btn.active svg { stroke: var(--accent); stroke-width: 2.2; }
-  .tab-btn.active span { color: var(--accent); }
+  .tab-btn.active span { color: var(--accent); font-weight: 600; }
   .tab-btn.active::before {
     content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-    width: 32px; height: 3px; background: var(--accent);
-    border-radius: 0 0 4px 4px;
-    box-shadow: 0 2px 8px rgba(216,31,42,.55);
+    width: 36px; height: 3px; background: var(--accent);
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 0 10px var(--accent), 0 2px 6px var(--accent-soft);
   }
   .tab-btn-center { margin-top: -28px; background: none !important; }
   .tab-center-circle {
     width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
     background: var(--accent); color: #fff; font-size: 32px; font-weight: 300; line-height: 1;
-    box-shadow: 0 4px 20px rgba(216,31,42,.6), 0 8px 32px rgba(216,31,42,.35);
+    box-shadow: 0 4px 20px var(--accent-soft), 0 8px 32px var(--accent-soft);
     margin-bottom: 4px; transition: transform var(--transition-speed) var(--ease);
     border: 2px solid rgba(255,255,255,.15);
   }
   .tab-btn-center:active .tab-center-circle { transform: scale(0.88); }
-  .tab-btn-center.active .tab-center-circle { box-shadow: 0 4px 28px rgba(216,31,42,.75), 0 8px 40px rgba(216,31,42,.45); }
+  .tab-btn-center.active .tab-center-circle { box-shadow: 0 4px 28px var(--accent), 0 8px 40px var(--accent-soft); }
   .tab-btn-center span { color: rgba(255,255,255,.5); font-weight: 500; }
   .tab-btn-center.active span { color: var(--accent); }
   .tab-btn-center::before { display: none !important; }
@@ -5883,8 +5883,25 @@ function renderHome() {
 
   const name = state.profile.displayName || state.profile.username || 'Atleta';
   const title = state.profile.greetingTitle;
+  const sex = state.profile.sex;
   const firstName = name.split(' ')[0];
-  const helloName = title ? `${title} ${firstName}` : firstName;
+  const isFemale = sex === 'mujer';
+  let greetWord = 'Hola';
+  let displayTitle = title;
+  if (title) {
+    if (title === 'Sra.' || title === 'Srta.') {
+      greetWord = 'Bienvenida';
+    } else if (title === 'Campeón') {
+      displayTitle = isFemale ? 'Campeona' : 'Campeón';
+      greetWord = isFemale ? 'Bienvenida' : 'Bienvenido';
+    } else if (title === 'Dr.') {
+      displayTitle = isFemale ? 'Dra.' : 'Dr.';
+      greetWord = isFemale ? 'Bienvenida' : 'Bienvenido';
+    } else {
+      greetWord = 'Bienvenido';
+    }
+  }
+  const helloName = title ? `${displayTitle} ${firstName}` : firstName;
   const todayStr = formatSpanishDate(new Date());
 
   const prog = computeWeeklyProgress();
@@ -5931,7 +5948,7 @@ function renderHome() {
     <div class="h-top-zone">
       <img id="homeHeroImg" class="h-top-photo" src="" alt="">
       <div class="h-top-header">
-        <div class="h-logo">VINCENT <span class="accent">GYM</span></div>
+        <div class="h-logo"><span class="accent">VINCENT</span> GYM</div>
         <div class="h-top-icons">
           <button class="h-icon-btn-sm" onclick="openPlaylist()" aria-label="Playlist" id="homePlaylistBtn" style="display:none;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
@@ -5947,7 +5964,7 @@ function renderHome() {
         </div>
       </div>
       <div class="h-greeting">
-        <div class="h-greeting-hi">Hola, <span class="accent">${helloName}</span></div>
+        <div class="h-greeting-hi">${greetWord}, <span class="accent">${helloName}</span></div>
         <div class="h-greeting-date">${todayStr}</div>
       </div>
 
