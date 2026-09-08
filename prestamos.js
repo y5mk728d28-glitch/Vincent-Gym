@@ -12,8 +12,8 @@ const US_STATES = [
   ['SC','South Carolina'],['SD','South Dakota'],['TN','Tennessee'],['TX','Texas'],['UT','Utah'],
   ['VT','Vermont'],['VA','Virginia'],['WA','Washington'],['WV','West Virginia'],['WI','Wisconsin'],['WY','Wyoming']
 ];
-const FREQ_DAYS = { diario:1, semanal:7, quincenal:15, anual:365 };
-const FREQ_LABEL = { diario:'Diario', semanal:'Semanal', quincenal:'Quincenal', anual:'Anual', personalizado:'Personalizado' };
+const FREQ_DAYS = { diario:1, semanal:7, quincenal:15, mensual:30, anual:365 };
+const FREQ_LABEL = { diario:'Diario', semanal:'Semanal', quincenal:'Quincenal', mensual:'Mensual', anual:'Anual', personalizado:'Personalizado' };
 const PENALTY_RATE = 0.05;
 
 /* ============ ID / FOLIO GENERATORS ============
@@ -92,9 +92,12 @@ function migrateState(){
   }
   delete state.setup;
   for(const loan of state.loans){
+    if(typeof loan.penalidadHabilitada !== 'boolean') loan.penalidadHabilitada = true;
     for(const c of loan.cuotas){
       if(!Array.isArray(c.pagos)) c.pagos = [];
       if(!Array.isArray(c.ajustes)) c.ajustes = [];
+      if(typeof c.interesAbonado !== 'number') c.interesAbonado = 0;
+      if(typeof c.penalidadHabilitada !== 'boolean') c.penalidadHabilitada = loan.penalidadHabilitada;
     }
   }
   for(const client of state.clients){
@@ -132,6 +135,12 @@ function localDateStr(d){ d = d || new Date(); const y=d.getFullYear(), m=String
 function parseDate(s){ if(!s) return null; const parts = s.split('-').map(Number); return new Date(parts[0], parts[1]-1, parts[2]); }
 function todayMidnight(){ const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
 function addDays(d, n){ const r = new Date(d); r.setDate(r.getDate()+n); return r; }
+function addMonthsFixedDay(baseDate, monthsToAdd, day){
+  const d = new Date(baseDate.getFullYear(), baseDate.getMonth() + monthsToAdd, 1);
+  const lastDay = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+  d.setDate(Math.min(day, lastDay));
+  return d;
+}
 function daysBetween(a,b){ return Math.round((b-a)/86400000); }
 function formatDateEs(s, opts){
   const d = parseDate(s); if(!d) return '—';
@@ -146,28 +155,49 @@ function randomDigits(n){ let s=''; for(let i=0;i<n;i++) s += Math.floor(Math.ra
 function periodDays(loan){
   return loan.frecuencia === 'personalizado' ? (Number(loan.diasPersonalizado) || 1) : FREQ_DAYS[loan.frecuencia];
 }
+function periodsPerYearOf(loan){
+  return loan.frecuencia === 'mensual' ? 12 : (365 / periodDays(loan));
+}
+/* Due date for period i (1-based). 'mensual' anchors to a fixed calendar
+   day (loan.diaCobro) each month so the date never drifts across months
+   with different lengths — everything else is a fixed day-count interval. */
+function cuotaVencimiento(loan, start, i){
+  if(loan.frecuencia === 'mensual'){
+    return addMonthsFixedDay(start, i, Number(loan.diaCobro) || start.getDate());
+  }
+  return addDays(start, periodDays(loan) * i);
+}
+function nextRenewalDate(loan){
+  if(loan.frecuencia === 'mensual'){
+    return addMonthsFixedDay(todayMidnight(), 1, Number(loan.diaCobro) || todayMidnight().getDate());
+  }
+  return addDays(todayMidnight(), periodDays(loan));
+}
 
 function buildSchedule(loan){
   const n = Number(loan.numCuotas);
   const pDays = periodDays(loan);
   const start = parseDate(loan.fechaInicio);
+  const penalidadHabilitada = loan.penalidadHabilitada !== false;
   const cuotas = [];
   if(!n || n < 1 || !pDays || pDays < 1 || !start) return cuotas;
+  if(loan.frecuencia === 'mensual' && !(Number(loan.diaCobro) >= 1 && Number(loan.diaCobro) <= 31)) return cuotas;
 
   if(loan.tasaTipo === 'simple'){
     const interesPeriodo = round2(loan.principal * (loan.tasa/100));
     const capitalPorCuota = loan.principal / n;
     for(let i=1;i<=n;i++){
-      const venc = addDays(start, pDays*i);
+      const venc = cuotaVencimiento(loan, start, i);
       const capital = i === n ? round2(loan.principal - round2(capitalPorCuota*(n-1))) : round2(capitalPorCuota);
       cuotas.push({
         numero:i, fechaVencimiento: localDateStr(venc),
         capital, interes: interesPeriodo, montoBase: round2(capital + interesPeriodo),
-        estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[], ajustes:[]
+        estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[], ajustes:[],
+        interesAbonado:0, penalidadHabilitada
       });
     }
   } else {
-    const periodsPerYear = 365 / pDays;
+    const periodsPerYear = periodsPerYearOf(loan);
     const r = (loan.tasa/100) / periodsPerYear;
     const montoCuota = r === 0 ? loan.principal/n : loan.principal * r / (1 - Math.pow(1+r, -n));
     let saldo = loan.principal;
@@ -176,11 +206,12 @@ function buildSchedule(loan){
       let capital = round2(montoCuota - interes);
       if(i === n) capital = round2(saldo);
       saldo = round2(saldo - capital);
-      const venc = addDays(start, pDays*i);
+      const venc = cuotaVencimiento(loan, start, i);
       cuotas.push({
         numero:i, fechaVencimiento: localDateStr(venc),
         capital, interes, montoBase: round2(capital + interes),
-        estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[], ajustes:[]
+        estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[], ajustes:[],
+        interesAbonado:0, penalidadHabilitada
       });
     }
   }
@@ -216,14 +247,23 @@ function cuotaEstatus(cuota){
 function cuotaAjustesTotal(cuota){
   return round2((cuota.ajustes||[]).reduce((s,a) => s + a.monto, 0));
 }
-function montoAPagar(cuota){
+function cuotaPenaltyOk(cuota){
+  return cuota.penalidadHabilitada !== false;
+}
+function montoBaseConPenalidad(cuota){
   const est = cuotaEstatus(cuota);
-  const base = est === 'atrasado' ? round2(cuota.montoBase * (1+PENALTY_RATE)) : cuota.montoBase;
-  return Math.max(0, round2(base + cuotaAjustesTotal(cuota)));
+  return (est === 'atrasado' && cuotaPenaltyOk(cuota)) ? round2(cuota.montoBase * (1+PENALTY_RATE)) : cuota.montoBase;
+}
+function montoAPagar(cuota){
+  const base = montoBaseConPenalidad(cuota) + cuotaAjustesTotal(cuota) - (cuota.interesAbonado||0);
+  return Math.max(0, round2(base));
+}
+function interesRequeridoTotal(cuota){
+  const est = cuotaEstatus(cuota);
+  return (est === 'atrasado' && cuotaPenaltyOk(cuota)) ? round2(cuota.interes * (1+PENALTY_RATE)) : cuota.interes;
 }
 function interesAPagar(cuota){
-  const est = cuotaEstatus(cuota);
-  return est === 'atrasado' ? round2(cuota.interes * (1+PENALTY_RATE)) : cuota.interes;
+  return Math.max(0, round2(interesRequeridoTotal(cuota) - (cuota.interesAbonado||0)));
 }
 function cuotaPagosTotal(cuota){
   return round2((cuota.pagos||[]).reduce((s,p) => s + p.monto, 0));
@@ -233,8 +273,14 @@ function ajusteHint(cuota){
   if(!total || cuota.estatus === 'cobrado') return '';
   return ` · 🎁 ajuste ${total<0?'-':'+'}${fmtMoney(Math.abs(total))}`;
 }
+function partialInterestHint(cuota){
+  const abonado = cuota.interesAbonado || 0;
+  if(!abonado || cuota.estatus === 'cobrado') return '';
+  const falta = Math.max(0, round2(interesRequeridoTotal(cuota) - abonado));
+  return ` · 💰 abonó ${fmtMoney(abonado)} de interés — faltan ${fmtMoney(falta)} este período`;
+}
 function renewalHint(cuota){
-  const n = (cuota.pagos||[]).filter(p => p.tipo === 'interes').length;
+  const n = (cuota.pagos||[]).filter(p => p.tipo === 'interes' && p.renovacionCompleta !== false).length;
   if(!n || cuota.estatus === 'cobrado') return '';
   return ` · 🔄 ${n} renovación${n>1?'es':''} (${fmtMoney(cuotaPagosTotal(cuota))} cobrado)`;
 }
@@ -651,6 +697,7 @@ function setLoanFilter(f){
 
 let currentTasaTipo = 'simple';
 let currentFrecuencia = 'diario';
+let currentPenalidadHabilitada = true;
 
 function setTasaTipo(t){
   currentTasaTipo = t;
@@ -663,7 +710,13 @@ function setFrecuencia(f){
   currentFrecuencia = f;
   document.querySelectorAll('.freq-opt').forEach(b => b.classList.toggle('active', b.dataset.f === f));
   document.getElementById('l_diasWrap').style.display = f === 'personalizado' ? '' : 'none';
+  document.getElementById('l_diaCobroWrap').style.display = f === 'mensual' ? '' : 'none';
   updateLoanPreview();
+}
+function setPenalidadHabilitada(v){
+  currentPenalidadHabilitada = v;
+  document.getElementById('penalidad_si').classList.toggle('active', v===true);
+  document.getElementById('penalidad_no').classList.toggle('active', v===false);
 }
 
 function openLoanModal(){
@@ -673,9 +726,11 @@ function openLoanModal(){
   document.getElementById('l_tasa').value = '';
   document.getElementById('l_numCuotas').value = '';
   document.getElementById('l_diasPersonalizado').value = '';
+  document.getElementById('l_diaCobro').value = '';
   document.getElementById('l_fechaInicio').value = localDateStr();
   setTasaTipo('simple');
   setFrecuencia('diario');
+  setPenalidadHabilitada(true);
   document.getElementById('loanPreviewBox').style.display = 'none';
   document.getElementById('loanModalOverlay').classList.add('show');
 }
@@ -686,10 +741,12 @@ function draftLoanFromForm(){
   const tasa = parseFloat(document.getElementById('l_tasa').value);
   const numCuotas = parseInt(document.getElementById('l_numCuotas').value, 10);
   const diasPersonalizado = parseInt(document.getElementById('l_diasPersonalizado').value, 10);
+  const diaCobro = parseInt(document.getElementById('l_diaCobro').value, 10);
   const fechaInicio = document.getElementById('l_fechaInicio').value;
   if(!(principal>0) || !(tasa>=0) || !(numCuotas>0) || !fechaInicio) return null;
   if(currentFrecuencia==='personalizado' && !(diasPersonalizado>0)) return null;
-  return { principal, tasa, tasaTipo: currentTasaTipo, frecuencia: currentFrecuencia, diasPersonalizado, numCuotas, fechaInicio };
+  if(currentFrecuencia==='mensual' && !(diaCobro>=1 && diaCobro<=28)) return null;
+  return { principal, tasa, tasaTipo: currentTasaTipo, frecuencia: currentFrecuencia, diasPersonalizado, diaCobro, numCuotas, fechaInicio, penalidadHabilitada: currentPenalidadHabilitada };
 }
 
 function updateLoanPreview(){
@@ -720,6 +777,7 @@ async function saveLoan(){
     id: uid(), clientId,
     principal: draft.principal, tasa: draft.tasa, tasaTipo: draft.tasaTipo,
     frecuencia: draft.frecuencia, diasPersonalizado: draft.diasPersonalizado || null,
+    diaCobro: draft.diaCobro || null, penalidadHabilitada: draft.penalidadHabilitada,
     numCuotas: draft.numCuotas, fechaInicio: draft.fechaInicio,
     cuotas, createdAt: Date.now()
   };
@@ -811,7 +869,7 @@ function renderLoanDetail(){
       <div class="cuota-num">${c.numero}</div>
       <div class="cuota-info">
         <div class="cuota-date">${formatDateEs(c.fechaVencimiento)}</div>
-        <div class="cuota-amt">${fmtMoney(monto)}${est==='atrasado' ? ' (con 5% penalidad)' : ''}${renewalHint(c)}${ajusteHint(c)}</div>
+        <div class="cuota-amt">${fmtMoney(monto)}${(est==='atrasado' && cuotaPenaltyOk(c)) ? ' (con 5% penalidad)' : ''}${renewalHint(c)}${ajusteHint(c)}${partialInterestHint(c)}</div>
       </div>
       ${editIcon}
       ${adjustIcon}
@@ -880,10 +938,20 @@ async function confirmPayment(){
   const metodo = document.getElementById('pay_metodo').value;
 
   if(currentPayType === 'interest'){
-    const fechaVencimientoAnterior = c.fechaVencimiento;
-    c.pagos.push({ fecha, monto, tipo:'interes', metodo, fechaVencimientoAnterior });
-    c.fechaVencimiento = localDateStr(addDays(todayMidnight(), periodDays(loan)));
-    c.estatus = 'pendiente';
+    const requerido = interesRequeridoTotal(c);
+    const abonadoAntes = c.interesAbonado || 0;
+    const nuevoAbonado = round2(abonadoAntes + monto);
+    const renovacionCompleta = nuevoAbonado >= requerido - 0.005;
+    const entry = { fecha, monto, tipo:'interes', metodo, abonadoAntes, renovacionCompleta };
+    if(renovacionCompleta){
+      entry.fechaVencimientoAnterior = c.fechaVencimiento;
+      c.fechaVencimiento = localDateStr(nextRenewalDate(loan));
+      c.estatus = 'pendiente';
+      c.interesAbonado = 0;
+    } else {
+      c.interesAbonado = nuevoAbonado;
+    }
+    c.pagos.push(entry);
   } else {
     c.pagos.push({ fecha, monto, tipo:'completo', metodo });
     c.estatus = 'cobrado';
@@ -895,18 +963,23 @@ async function confirmPayment(){
   closePayModal();
   renderLoanDetail();
   renderLoans();
-  showToast(currentPayType === 'interest' ? 'Cuota renovada' : 'Pago registrado');
+  showToast(currentPayType === 'interest' ? (c.interesAbonado ? 'Abono parcial registrado' : 'Cuota renovada') : 'Pago registrado');
 }
 async function undoPayment(loanId, numero){
-  if(!confirm('¿Deshacer este pago y marcar la cuota como pendiente de nuevo?')) return;
+  if(!confirm('¿Deshacer este pago?')) return;
   const loan = state.loans.find(l => l.id === loanId);
   const c = loan.cuotas.find(x => x.numero === numero);
-  let popped = null;
-  if(Array.isArray(c.pagos)) popped = c.pagos.pop();
-  if(popped && popped.tipo === 'interes' && popped.fechaVencimientoAnterior){
-    c.fechaVencimiento = popped.fechaVencimientoAnterior;
+  if(!Array.isArray(c.pagos) || !c.pagos.length) return;
+  const popped = c.pagos.pop();
+  if(popped.tipo === 'completo'){
+    c.estatus = 'pendiente'; c.fechaPago = null; c.montoPagado = 0; c.metodoPago = '';
+  } else if(popped.tipo === 'interes'){
+    if(popped.renovacionCompleta){
+      if(popped.fechaVencimientoAnterior) c.fechaVencimiento = popped.fechaVencimientoAnterior;
+      c.estatus = 'pendiente';
+    }
+    c.interesAbonado = popped.abonadoAntes || 0;
   }
-  c.estatus = 'pendiente'; c.fechaPago = null; c.montoPagado = 0; c.metodoPago = '';
   await saveState();
   renderLoanDetail();
   renderLoans();
@@ -963,6 +1036,7 @@ function openAdjustModal(loanId, numero){
   document.getElementById('adj_montoActual').textContent = fmtMoney(montoAPagar(c));
   document.getElementById('adj_monto').value = '';
   document.getElementById('adj_motivo').value = '';
+  document.getElementById('adj_btnPenalidad').style.display = (cuotaEstatus(c) === 'atrasado' && cuotaPenaltyOk(c)) ? '' : 'none';
   renderAdjustHistory();
   document.getElementById('adjustModalOverlay').classList.add('show');
 }
@@ -1092,7 +1166,7 @@ function renderClientView(){
       const monto = est === 'cobrado' ? c.montoPagado : montoAPagar(c);
       return `<div class="cuota-row" style="margin:0 0 8px;">
         <div class="cuota-num">${c.numero}</div>
-        <div class="cuota-info"><div class="cuota-date">${formatDateEs(c.fechaVencimiento)}</div><div class="cuota-amt">${fmtMoney(monto)}${est==='atrasado' ? ' (con 5% penalidad)' : ''}${renewalHint(c)}${ajusteHint(c)}</div></div>
+        <div class="cuota-info"><div class="cuota-date">${formatDateEs(c.fechaVencimiento)}</div><div class="cuota-amt">${fmtMoney(monto)}${(est==='atrasado' && cuotaPenaltyOk(c)) ? ' (con 5% penalidad)' : ''}${renewalHint(c)}${ajusteHint(c)}${partialInterestHint(c)}</div></div>
         <span class="status-badge ${est}">${est}</span>
       </div>`;
     }).join('');
@@ -1186,8 +1260,8 @@ function importData(ev){
 }
 
 /* ============ PDF CONTRACT ============ */
-const CONTRACT_FREQ_EN = { diario:'daily', semanal:'weekly', quincenal:'biweekly', anual:'annual', personalizado:'custom-interval' };
-const CONTRACT_FREQ_ES = { diario:'diario', semanal:'semanal', quincenal:'quincenal', anual:'anual', personalizado:'de intervalo personalizado' };
+const CONTRACT_FREQ_EN = { diario:'daily', semanal:'weekly', quincenal:'biweekly', mensual:'monthly', anual:'annual', personalizado:'custom-interval' };
+const CONTRACT_FREQ_ES = { diario:'diario', semanal:'semanal', quincenal:'quincenal', mensual:'mensual', anual:'anual', personalizado:'de intervalo personalizado' };
 
 const CONTRACT_STRINGS = {
   en: {
@@ -1206,6 +1280,7 @@ const CONTRACT_STRINGS = {
     s4: '4. PAYMENT SCHEDULE',
     schedule: (n,f,extra,start,total) => 'Total of ' + n + ' payments, ' + f + extra + ', beginning ' + start + '. Total amount to be repaid if all payments are made on time: ' + total + '.',
     everyDays: (n) => ' (every ' + n + ' days)',
+    monthlyDay: (n) => ' (day ' + n + ' of each month)',
     thNum:'#', thDue:'Due Date', thPrincipal:'Principal', thInterest:'Interest', thPayment:'Payment',
     s5: '5. LATE PAYMENT FEE',
     lateFee: 'If any installment is not received by its due date, a one-time late fee equal to five percent (5%) of that installment amount will be added to the amount due for that installment. This fee does not compound and applies once per late installment.',
@@ -1238,6 +1313,7 @@ const CONTRACT_STRINGS = {
     s4: '4. CALENDARIO DE PAGOS',
     schedule: (n,f,extra,start,total) => 'Total de ' + n + ' pagos, de frecuencia ' + f + extra + ', comenzando el ' + start + '. Monto total a pagar si todos los pagos se realizan a tiempo: ' + total + '.',
     everyDays: (n) => ' (cada ' + n + ' días)',
+    monthlyDay: (n) => ' (el día ' + n + ' de cada mes)',
     thNum:'#', thDue:'Vencimiento', thPrincipal:'Capital', thInterest:'Interés', thPayment:'Pago',
     s5: '5. CARGO POR PAGO ATRASADO',
     lateFee: 'Si una cuota no se recibe en su fecha de vencimiento, se añadirá a esa cuota un cargo por atraso único equivalente al cinco por ciento (5%) del monto de esa cuota. Este cargo no es acumulativo y aplica una sola vez por cuota atrasada.',
@@ -1337,7 +1413,8 @@ function generateContractPDF(loanId, lang){
   para(T.aprDisclosure(apr.toFixed(2)), 9.5);
 
   heading(T.s4);
-  const extra = loan.frecuencia === 'personalizado' ? T.everyDays(loan.diasPersonalizado) : '';
+  const extra = loan.frecuencia === 'personalizado' ? T.everyDays(loan.diasPersonalizado)
+    : loan.frecuencia === 'mensual' ? T.monthlyDay(loan.diaCobro) : '';
   para(T.schedule(loan.numCuotas, freqLabel, extra, fmtDate(cuotas[0].fechaVencimiento), fmtMoney(totalAPagar)));
 
   ensureSpace(20);

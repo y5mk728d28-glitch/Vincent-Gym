@@ -7,15 +7,15 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="theme-color" content="#060907">
-<meta name="build-version" content="2026-08-20-02">
+<meta name="build-version" content="2026-08-21-01">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Vincent Bank">
-<link rel="apple-touch-icon" href="logo.png?v=2026-08-20-02">
-<link rel="icon" href="logo.png?v=2026-08-20-02">
+<link rel="apple-touch-icon" href="logo.png?v=2026-08-21-01">
+<link rel="icon" href="logo.png?v=2026-08-21-01">
 <title>Vincent Bank — Préstamos</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="jspdf.umd.min.js?v=2026-08-20-02"></script>
+<script src="jspdf.umd.min.js?v=2026-08-21-01"></script>
 <style>
 :root{
   --bg:#060907;
@@ -212,7 +212,7 @@ a{color:var(--accent2);}
   <div class="center-wrap">
     <div class="auth-card">
       <div id="su_backWrap" style="margin-bottom:10px;display:none;"><button class="mini-btn" style="flex:none;padding:6px 12px;" onclick="showLoginView()">← Volver</button></div>
-      <div class="auth-logo"><img src="logo.png?v=2026-08-20-02" alt="Vincent Bank"></div>
+      <div class="auth-logo"><img src="logo.png?v=2026-08-21-01" alt="Vincent Bank"></div>
       <div class="auth-title">Crear cuenta de administrador</div>
       <div class="auth-sub">Usuario, datos del prestamista y contraseña</div>
       <div class="form-group">
@@ -258,7 +258,7 @@ a{color:var(--accent2);}
 <div class="view" id="view-login">
   <div class="center-wrap">
     <div class="auth-card">
-      <div class="auth-logo"><img src="logo.png?v=2026-08-20-02" alt="Vincent Bank"></div>
+      <div class="auth-logo"><img src="logo.png?v=2026-08-21-01" alt="Vincent Bank"></div>
       <div class="auth-title">Vincent Bank</div>
       <div class="auth-sub">Selecciona cómo quieres entrar</div>
       <div class="tabs-row">
@@ -299,7 +299,7 @@ a{color:var(--accent2);}
 <!-- ============ ADMIN APP ============ -->
 <div class="view" id="view-admin">
   <header class="topbar">
-    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-08-20-02" alt="Vincent Bank"></span><span class="brand-name">Vincent Bank</span></div>
+    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-08-21-01" alt="Vincent Bank"></span><span class="brand-name">Vincent Bank</span></div>
     <div class="topbar-actions">
       <button class="icon-btn" onclick="openSettings()">⚙️</button>
     </div>
@@ -428,7 +428,7 @@ a{color:var(--accent2);}
 <!-- ============ CLIENT APP ============ -->
 <div class="view" id="view-client">
   <header class="topbar">
-    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-08-20-02" alt="Vincent Bank"></span><span class="brand-name" id="clientBrandName">Vincent Bank</span></div>
+    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-08-21-01" alt="Vincent Bank"></span><span class="brand-name" id="clientBrandName">Vincent Bank</span></div>
     <div class="topbar-actions"><button class="icon-btn" onclick="logout()">🚪</button></div>
   </header>
   <div style="padding:6px 18px;">
@@ -585,12 +585,30 @@ a{color:var(--accent2);}
         <button class="freq-opt active" data-f="diario" onclick="setFrecuencia('diario')">Diario</button>
         <button class="freq-opt" data-f="semanal" onclick="setFrecuencia('semanal')">Semanal</button>
         <button class="freq-opt" data-f="quincenal" onclick="setFrecuencia('quincenal')">Quincenal</button>
+        <button class="freq-opt" data-f="mensual" onclick="setFrecuencia('mensual')">Mensual</button>
         <button class="freq-opt" data-f="anual" onclick="setFrecuencia('anual')">Anual</button>
-        <button class="freq-opt" data-f="personalizado" onclick="setFrecuencia('personalizado')" style="grid-column:span 2;">Personalizado (cada N días)</button>
+        <button class="freq-opt" data-f="personalizado" onclick="setFrecuencia('personalizado')">Personalizado</button>
+      </div>
+      <div class="form-group" id="l_diaCobroWrap" style="display:none;margin-top:10px;">
+        <label class="form-label">Día de cobro cada mes</label>
+        <input class="form-input" id="l_diaCobro" type="number" min="1" max="28" placeholder="Ej. 1" oninput="updateLoanPreview()">
+        <div class="form-hint">Se cobra ese día calendario cada mes (ej. siempre el día 1), sin importar si el mes tiene 28, 30 o 31 días — así la fecha nunca se recorre, como la renta.</div>
       </div>
       <div class="form-group" id="l_diasWrap" style="display:none;margin-top:10px;">
         <label class="form-label">Cada cuántos días</label>
         <input class="form-input" id="l_diasPersonalizado" type="number" min="1" step="1" placeholder="Ej. 5" oninput="updateLoanPreview()">
+      </div>
+
+      <div class="section-divider">Penalidad por atraso</div>
+      <div class="type-grid">
+        <button class="type-opt active" id="penalidad_si" onclick="setPenalidadHabilitada(true)">
+          <div class="t-name">Sí cobrar</div>
+          <div class="t-desc">5% extra sobre la cuota atrasada</div>
+        </button>
+        <button class="type-opt" id="penalidad_no" onclick="setPenalidadHabilitada(false)">
+          <div class="t-name">No cobrar</div>
+          <div class="t-desc">Este préstamo nunca aplica penalidad automática</div>
+        </button>
       </div>
 
       <div class="preview-box" id="loanPreviewBox" style="display:none;">
@@ -722,7 +740,7 @@ a{color:var(--accent2);}
       </div>
       <div class="form-hint" style="margin:10px 0;">Un monto negativo reduce lo que debe (perdón, descuento, promoción). Un monto positivo lo aumenta.</div>
       <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <button class="mini-btn" style="padding:10px 8px;" onclick="prefillAdjust('penalidad')">🎁 Condonar penalidad</button>
+        <button class="mini-btn" id="adj_btnPenalidad" style="padding:10px 8px;" onclick="prefillAdjust('penalidad')">🎁 Condonar penalidad</button>
         <button class="mini-btn" style="padding:10px 8px;" onclick="prefillAdjust('interes')">🎁 Sin interés este período</button>
       </div>
       <div class="form-group">
@@ -817,6 +835,6 @@ a{color:var(--accent2);}
 
 <div class="toast" id="toast"></div>
 
-<script src="prestamos.js?v=2026-08-20-02"></script>
+<script src="prestamos.js?v=2026-08-21-01"></script>
 </body>
 </html>
