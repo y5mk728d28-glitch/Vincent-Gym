@@ -279,6 +279,12 @@ function partialInterestHint(cuota){
   const falta = Math.max(0, round2(interesRequeridoTotal(cuota) - abonado));
   return ` · <svg class="icon icon-sm"><use href="#i-coins"/></svg> abonó ${fmtMoney(abonado)} de interés — faltan ${fmtMoney(falta)} este período`;
 }
+function partialInterestBadge(cuota){
+  const abonado = cuota.interesAbonado || 0;
+  if(!abonado || cuota.estatus === 'cobrado') return '';
+  const falta = Math.max(0, round2(interesRequeridoTotal(cuota) - abonado));
+  return `<div class="interest-pending-badge"><svg class="icon icon-sm"><use href="#i-coins"/></svg> Abonó ${fmtMoney(abonado)} de interés — faltan <strong>${fmtMoney(falta)}</strong> este período</div>`;
+}
 function renewalHint(cuota){
   const n = (cuota.pagos||[]).filter(p => p.tipo === 'interes' && p.renovacionCompleta !== false).length;
   if(!n || cuota.estatus === 'cobrado') return '';
@@ -869,11 +875,12 @@ function renderLoanDetail(){
       <div class="cuota-num">${c.numero}</div>
       <div class="cuota-info">
         <div class="cuota-date">${formatDateEs(c.fechaVencimiento)}</div>
-        <div class="cuota-amt">${fmtMoney(monto)}${(est==='atrasado' && cuotaPenaltyOk(c)) ? ' (con 5% penalidad)' : ''}${renewalHint(c)}${ajusteHint(c)}${partialInterestHint(c)}</div>
+        <div class="cuota-amt">${fmtMoney(monto)}${(est==='atrasado' && cuotaPenaltyOk(c)) ? ' (con 5% penalidad)' : ''}${renewalHint(c)}${ajusteHint(c)}</div>
       </div>
       ${editIcon}
       ${adjustIcon}
       <span class="status-badge ${est}">${est}</span>
+      ${partialInterestBadge(c)}
     </div>`;
   }).join('');
 }
@@ -1011,6 +1018,9 @@ async function confirmEditPaidPayment(){
   p.metodo = document.getElementById('ep_metodo').value;
   if(c.estatus === 'cobrado' && p.tipo === 'completo'){
     c.fechaPago = p.fecha; c.montoPagado = p.monto; c.metodoPago = p.metodo;
+  }
+  if(p.tipo === 'interes' && p.renovacionCompleta === false){
+    c.interesAbonado = round2((p.abonadoAntes||0) + p.monto);
   }
   await saveState();
   closeEditPaidModal();

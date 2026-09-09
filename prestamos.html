@@ -7,15 +7,15 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="theme-color" content="#060907">
-<meta name="build-version" content="2026-08-22-01">
+<meta name="build-version" content="2026-09-09-01">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Vincent Bank">
-<link rel="apple-touch-icon" href="logo.png?v=2026-08-22-01">
-<link rel="icon" href="logo.png?v=2026-08-22-01">
+<link rel="apple-touch-icon" href="logo.png?v=2026-09-09-01">
+<link rel="icon" href="logo.png?v=2026-09-09-01">
 <title>Vincent Bank — Préstamos</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="jspdf.umd.min.js?v=2026-08-22-01"></script>
+<script src="jspdf.umd.min.js?v=2026-09-09-01"></script>
 <style>
 :root{
   --bg:#0a0805;
@@ -200,11 +200,13 @@ a{color:var(--accent2);}
 .kpi-mini{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 6px;text-align:center;}
 .kpi-mini .v{font-family:'DM Mono',monospace;font-size:15px;font-weight:700;}
 .kpi-mini .l{font-size:9.5px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.04em;}
-.cuota-row{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 14px;margin:0 18px 8px;}
+.cuota-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 14px;margin:0 18px 8px;}
 .cuota-num{width:30px;height:30px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0;}
 .cuota-info{flex:1;min-width:0;}
 .cuota-date{font-size:13px;font-weight:600;}
 .cuota-amt{font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:1px;}
+.interest-pending-badge{display:flex;flex:0 0 100%;align-items:flex-start;gap:6px;margin:2px 0 0 40px;padding:6px 10px;border-radius:10px;background:var(--warn-soft);color:var(--warn);font-size:11.5px;font-weight:700;letter-spacing:.01em;line-height:1.45;}
+.interest-pending-badge .icon{margin-top:1px;flex-shrink:0;}
 
 .toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);background:rgba(26,20,10,.92);border:1px solid var(--border-strong);color:var(--text);padding:12px 18px;border-radius:30px;font-size:13px;font-weight:500;box-shadow:var(--shadow-md);opacity:0;pointer-events:none;transition:all .25s var(--ease);z-index:400;max-width:88vw;text-align:center;backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);}
 .toast.show{opacity:1;transform:translate(-50%,0);}
@@ -264,7 +266,7 @@ a{color:var(--accent2);}
   <div class="center-wrap">
     <div class="auth-card">
       <div id="su_backWrap" style="margin-bottom:10px;display:none;"><button class="mini-btn" style="flex:none;padding:6px 12px;" onclick="showLoginView()"><svg class="icon"><use href="#i-arrow-left"/></svg> Volver</button></div>
-      <div class="auth-logo"><img src="logo.png?v=2026-08-22-01" alt="Vincent Bank"></div>
+      <div class="auth-logo"><img src="logo.png?v=2026-09-09-01" alt="Vincent Bank"></div>
       <div class="auth-title">Crear cuenta de administrador</div>
       <div class="auth-sub">Usuario, datos del prestamista y contraseña</div>
       <div class="form-group">
@@ -310,7 +312,7 @@ a{color:var(--accent2);}
 <div class="view" id="view-login">
   <div class="center-wrap">
     <div class="auth-card">
-      <div class="auth-logo"><img src="logo.png?v=2026-08-22-01" alt="Vincent Bank"></div>
+      <div class="auth-logo"><img src="logo.png?v=2026-09-09-01" alt="Vincent Bank"></div>
       <div class="auth-title">Vincent Bank</div>
       <div class="auth-sub">Selecciona cómo quieres entrar</div>
       <div class="tabs-row">
@@ -351,7 +353,7 @@ a{color:var(--accent2);}
 <!-- ============ ADMIN APP ============ -->
 <div class="view" id="view-admin">
   <header class="topbar">
-    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-08-22-01" alt="Vincent Bank"></span><span class="brand-name">Vincent Bank</span></div>
+    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-09-09-01" alt="Vincent Bank"></span><span class="brand-name">Vincent Bank</span></div>
     <div class="topbar-actions">
       <button class="icon-btn" onclick="openSettings()"><svg class="icon"><use href="#i-settings"/></svg></button>
     </div>
@@ -480,7 +482,7 @@ a{color:var(--accent2);}
 <!-- ============ CLIENT APP ============ -->
 <div class="view" id="view-client">
   <header class="topbar">
-    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-08-22-01" alt="Vincent Bank"></span><span class="brand-name" id="clientBrandName">Vincent Bank</span></div>
+    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-09-09-01" alt="Vincent Bank"></span><span class="brand-name" id="clientBrandName">Vincent Bank</span></div>
     <div class="topbar-actions"><button class="icon-btn" onclick="logout()"><svg class="icon"><use href="#i-door"/></svg></button></div>
   </header>
   <div style="padding:6px 18px;">
@@ -887,6 +889,6 @@ a{color:var(--accent2);}
 
 <div class="toast" id="toast"></div>
 
-<script src="prestamos.js?v=2026-08-22-01"></script>
+<script src="prestamos.js?v=2026-09-09-01"></script>
 </body>
 </html>
