@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="build-version" content="2026-07-10-03">
+<meta name="build-version" content="2026-09-15-01">
 <title>Vincent Forge — Training Log</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -366,6 +366,8 @@
     font-weight:500;
   }
   .icon-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .icon-btn:disabled { opacity:.4; cursor:not-allowed; }
+  .icon-btn:disabled:hover { border-color: var(--border); color: var(--text); background: var(--card); }
   .dots-btn { font-size:18px !important; padding:6px 14px !important; font-weight:700; }
   .more-menu {
     display:none; position:absolute; top:100%; right:0; margin-top:6px; z-index:65;
@@ -1536,7 +1538,7 @@
           <option value="">Aplicar rutina guardada...</option>
         </select>
         <button class="icon-btn" onclick="openSaveRoutineModal()">💾 GUARDAR COMO RUTINA</button>
-        <button class="icon-btn" onclick="updateRoutineWithCurrent()">🔄 ACTUALIZAR RUTINA</button>
+        <button class="icon-btn" id="updateRoutineBtn" onclick="updateRoutineWithCurrent()">🔄 ACTUALIZAR RUTINA</button>
         <div style="position:relative;">
           <button class="icon-btn" onclick="toggleClearMenu()" style="border-color:var(--accent);color:var(--accent);">🗑 VACIAR ▾</button>
           <div id="clearMenu" class="clear-menu">
@@ -2134,7 +2136,6 @@ const EXERCISE_DB = [
   {name:"Extensión Overhead con Mancuerna", muscle:"Tríceps", ratings:{strength:4,hypertrophy:8,endurance:5}, zones:{tri_larga_over:1,lateral:0.5,larga:0.95,medial:0.5}, youtubeLink:"https://www.youtube.com/results?search_query=overhead+triceps+extension+mancuerna+tecnica"},
   {name:"Diamond Push-Up", muscle:"Tríceps", ratings:{strength:5,hypertrophy:6,endurance:7}, zones:{tri_compound:1,lateral:0.7,larga:0.55,medial:0.85}, youtubeLink:"https://www.youtube.com/results?search_query=diamond+push+up+triceps+tecnica"},
   {name:"Pushdown con Barra", muscle:"Tríceps", ratings:{strength:5,hypertrophy:7,endurance:6}, zones:{tri_lateral:1,lateral:0.8,larga:0.5,medial:0.7}, youtubeLink:"https://www.youtube.com/results?search_query=pushdown+barra+triceps+tecnica"},
-  {name:"Fondos en Paralelas (Tríceps)", muscle:"Tríceps", ratings:{strength:7,hypertrophy:8,endurance:5}, zones:{tri_compound:1,lateral:0.75,larga:0.7,medial:0.8}, youtubeLink:"https://www.youtube.com/results?search_query=dips+triceps+paralelas+tecnica"},
 
   // ── CUÁDRICEPS adicionales ─────────────────────────────────────────────────
   {name:"Hack Squat", muscle:"Cuádriceps", ratings:{strength:8,hypertrophy:8,endurance:4}, zones:{squat_pattern:1}, youtubeLink:"https://www.youtube.com/results?search_query=hack+squat+cuadriceps+tecnica"},
@@ -2431,6 +2432,35 @@ function doRecovery() {
   document.getElementById('recoveryConfirm').classList.add('show');
 }
 
+// One-time (idempotent) cleanup for exercises that used to exist as separate
+// duplicate-ish DB entries and got merged into one canonical name/muscle —
+// rewrites any already-logged sets and saved routine templates so old and
+// new weeks match up again for the "ant: X" reference system.
+const EXERCISE_NAME_MERGES = [
+  { oldName: 'Fondos en Paralelas (Tríceps)', newName: 'Fondos en Paralelas', newMuscle: 'Pecho' },
+];
+function migrateRenamedExercises() {
+  let changed = false;
+  const renameInList = (list) => {
+    if (!Array.isArray(list)) return;
+    list.forEach(ex => {
+      const m = EXERCISE_NAME_MERGES.find(m => ex.name === m.oldName);
+      if (m) { ex.name = m.newName; ex.muscle = m.newMuscle; changed = true; }
+    });
+  };
+  Object.values(state.routines || {}).forEach(r => {
+    if (r.type === 'week') renameInList(r.exercises);
+    else if (r.days) Object.values(r.days).forEach(renameInList);
+  });
+  renameInList(state.customExercises);
+  Object.values(state.trainingYears || {}).forEach(yd => {
+    Object.values(yd.weeksData || {}).forEach(wd => {
+      if (Array.isArray(wd)) renameInList(wd);
+      else if (wd) Object.values(wd).forEach(renameInList);
+    });
+  });
+  return changed;
+}
 async function enterApp(username) {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appShell').classList.add('show');
@@ -2445,6 +2475,7 @@ async function enterApp(username) {
     state.currentYearKey = key;
   }
   if (!state.currentYearKey) state.currentYearKey = Object.keys(state.trainingYears)[0];
+  if (migrateRenamedExercises()) saveState();
 
   syncCurrentDayToToday();
   initApp();
@@ -2790,7 +2821,7 @@ function switchPage(page) {
   if (page === 'rutinas') renderRoutinesList();
   if (page === 'progreso') renderProgreso();
   if (page === 'perfil') loadSettingsForm();
-  if (page === 'registrar') { renderExercises(); updateIncompleteBadge(); }
+  if (page === 'registrar') { renderExercises(); updateIncompleteBadge(); updateRoutineButtonState(); }
   if (page === 'home') renderHome();
   state.lastPage = page;
 }
@@ -3259,6 +3290,7 @@ function renderWeekDate() {
   document.getElementById('dayPickerWrap').style.display = state.mode === 'day' ? 'flex' : 'none';
   if (state.mode === 'day') populateDayPicker();
   updateIncompleteBadge();
+  updateRoutineButtonState();
 }
 function updateIncompleteBadge() {
   const badge = document.getElementById('weekBadge');
@@ -4492,6 +4524,7 @@ function applyRoutine(name) {
   }
   renderExercises();
   saveState();
+  updateRoutineButtonState();
   showToast("Rutina '" + name + "' aplicada — " + addedCount + " ejercicios agregados");
 }
 
@@ -4504,6 +4537,25 @@ function getSourceRoutineForCurrent() {
     return (typeof src === 'object') ? (src[state.currentDay] || null) : null;
   }
   return (typeof src === 'string') ? src : null;
+}
+function updateRoutineButtonState() {
+  // "ACTUALIZAR RUTINA" silently no-ops when nothing is linked (easy to miss
+  // a small toast) — disable + relabel it up front so it's obvious at a
+  // glance whether tapping it will do anything, and which routine it'll hit.
+  const btn = document.getElementById('updateRoutineBtn');
+  if (!btn) return;
+  const source = getSourceRoutineForCurrent();
+  if (source && !PRESET_ROUTINES[source]) {
+    btn.disabled = false;
+    btn.textContent = '🔄 ACTUALIZAR "' + source.toUpperCase() + '"';
+    btn.title = 'Reemplaza el contenido de "' + source + '" con lo que ves aquí ahora mismo';
+  } else {
+    btn.disabled = true;
+    btn.textContent = '🔄 ACTUALIZAR RUTINA';
+    btn.title = source
+      ? '"' + source + '" es una rutina predeterminada y no se puede modificar'
+      : 'Ninguna rutina está vinculada a esta vista — usa "Guardar como Rutina" primero';
+  }
 }
 
 function openSaveRoutineModal() {
@@ -4576,7 +4628,7 @@ function confirmSaveRoutine(scope) {
       yd.routineSource[state.currentWeek][dayName] = name;
       totalEx += deduped.length; totalDays++;
     });
-    saveState(); renderRoutinesList(); populateApplyRoutineSelect(); closeSaveRoutineModal();
+    saveState(); renderRoutinesList(); populateApplyRoutineSelect(); closeSaveRoutineModal(); updateRoutineButtonState();
     showToast("Rutina '" + name + "' guardada — " + totalEx + " ejercicios en " + totalDays + " día(s)");
   } else {
     // Save current view only
@@ -4591,7 +4643,7 @@ function confirmSaveRoutine(scope) {
       state.routines[name] = { type:'week', exercises: template };
       yd.routineSource[state.currentWeek] = name;
     }
-    saveState(); renderRoutinesList(); populateApplyRoutineSelect(); closeSaveRoutineModal();
+    saveState(); renderRoutinesList(); populateApplyRoutineSelect(); closeSaveRoutineModal(); updateRoutineButtonState();
     showToast("Rutina '" + name + "' guardada — " + exercises.length + " ejercicios");
   }
 }
