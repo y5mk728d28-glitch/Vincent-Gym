@@ -17,37 +17,19 @@ const FREQ_LABEL = { diario:'Diario', semanal:'Semanal', quincenal:'Quincenal', 
 const PENALTY_RATE = 0.05;
 
 /* ============ ID / FOLIO GENERATORS ============
-   Cliente:  {Iniciales(2)}{AñoNac(2)}{Estado(2)}{5 dígitos al azar}   — asignado una sola vez, de por vida
-   Préstamo: {Estado(2)}{Año del préstamo(2)}{Categoría(1)}{5 dígitos al azar}
-             Categoría por monto: <$100 = C, $100–$9,999.99 = M, >=$10,000 = D
+   Cliente:  C-{secuencial}          — número simple asignado en orden, sin datos personales codificados
+   Préstamo: {Estado(2)}{Año del préstamo(2)}-{secuencial}   — mantiene dónde/cuándo, sin monto ni azar
+   Ambos usan un contador guardado en el estado (state.clientSeq / state.loanSeq) para no repetirse nunca.
 */
-function nameInitials(nombre){
-  const words = String(nombre||'').trim().split(/\s+/).filter(Boolean);
-  if(words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
-  if(words.length === 1) return words[0].slice(0,2).toUpperCase().padEnd(2,'X');
-  return 'XX';
+function generateClientCodigo(){
+  state.clientSeq = (state.clientSeq || 0) + 1;
+  return 'C-' + String(state.clientSeq).padStart(4,'0');
 }
-function montoCategoria(monto){
-  if(monto < 100) return 'C';
-  if(monto < 10000) return 'M';
-  return 'D';
-}
-function clientBirthYear(client){
-  if(client.fechaNacimiento){ const d = parseDate(client.fechaNacimiento); if(d) return d.getFullYear(); }
-  return client.anioNacimiento || 0;
-}
-function generateClientCodigo(nombre, anioNacimiento, estado){
-  const prefix = nameInitials(nombre) + String(anioNacimiento||0).padStart(2,'0').slice(-2) + (estado||'NV');
-  let codigo;
-  do { codigo = prefix + randomDigits(5); } while(state.clients.some(c => c.codigo === codigo));
-  return codigo;
-}
-function generateLoanFolio(estado, fechaInicio, principal){
+function generateLoanFolio(estado, fechaInicio){
+  const prefix = String(estado||'XX').toUpperCase().replace(/[^A-Z0-9]/g,'').padEnd(2,'X').slice(0,2);
   const anio = String(parseDate(fechaInicio).getFullYear()).slice(-2);
-  const prefix = estado + anio + montoCategoria(principal);
-  let folio;
-  do { folio = prefix + randomDigits(5); } while(state.loans.some(l => l.folio === folio));
-  return folio;
+  state.loanSeq = (state.loanSeq || 0) + 1;
+  return prefix + anio + '-' + String(state.loanSeq).padStart(4,'0');
 }
 
 /* ============ STATE & PERSISTENCE ============ */
@@ -55,7 +37,9 @@ function defaultState(){
   return {
     admins: [],
     clients: [],
-    loans: []
+    loans: [],
+    clientSeq: 0,
+    loanSeq: 0
   };
 }
 let state = defaultState();
@@ -102,15 +86,24 @@ function migrateState(){
   }
   for(const client of state.clients){
     if(!Array.isArray(client.historialDirecciones)) client.historialDirecciones = [];
-    if(/^\d{6}$/.test(client.codigo || '')){
-      client.codigo = generateClientCodigo(client.nombre, clientBirthYear(client), client.estado || 'NV');
-    }
+    if(!client.pais) client.pais = 'Estados Unidos';
   }
-  for(const loan of state.loans){
-    if(/^P-[A-Z0-9]{6}$/.test(loan.folio || '')){
-      const client = state.clients.find(c => c.id === loan.clientId);
-      loan.folio = generateLoanFolio((client && client.estado) || 'NV', loan.fechaInicio, loan.principal);
-    }
+  /* Any client/loan ID not in the current format (including the two earlier
+     formats this app has used) gets renumbered in creation order, so every
+     ID in the app — old or new — always matches what the settings legend
+     currently describes. */
+  const clientsToRenumber = state.clients
+    .filter(c => !/^C-\d{4,}$/.test(c.codigo || ''))
+    .sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+  for(const client of clientsToRenumber){
+    client.codigo = generateClientCodigo();
+  }
+  const loansToRenumber = state.loans
+    .filter(l => !/^[A-Z0-9]{2}\d{2}-\d{4,}$/.test(l.folio || ''))
+    .sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+  for(const loan of loansToRenumber){
+    const client = state.clients.find(c => c.id === loan.clientId);
+    loan.folio = generateLoanFolio((client && client.estado) || 'XX', loan.fechaInicio);
   }
   saveState();
 }
@@ -149,7 +142,6 @@ function formatDateEs(s, opts){
 function round2(n){ return Math.round((n + Number.EPSILON) * 100) / 100; }
 function fmtMoney(n){ return '$' + (n||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
-function randomDigits(n){ let s=''; for(let i=0;i<n;i++) s += Math.floor(Math.random()*10); return s; }
 
 /* ============ LOAN MATH ============ */
 function periodDays(loan){
@@ -192,6 +184,21 @@ function buildSchedule(loan){
       cuotas.push({
         numero:i, fechaVencimiento: localDateStr(venc),
         capital, interes: interesPeriodo, montoBase: round2(capital + interesPeriodo),
+        estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[], ajustes:[],
+        interesAbonado:0, penalidadHabilitada
+      });
+    }
+  } else if(loan.tasaTipo === 'fijo'){
+    const interesTotal = round2((loan.montoTotal||0) - loan.principal);
+    const interesPorCuota = round2(interesTotal / n);
+    const capitalPorCuota = loan.principal / n;
+    for(let i=1;i<=n;i++){
+      const venc = cuotaVencimiento(loan, start, i);
+      const capital = i === n ? round2(loan.principal - round2(capitalPorCuota*(n-1))) : round2(capitalPorCuota);
+      const interes = i === n ? round2(interesTotal - round2(interesPorCuota*(n-1))) : interesPorCuota;
+      cuotas.push({
+        numero:i, fechaVencimiento: localDateStr(venc),
+        capital, interes, montoBase: round2(capital + interes),
         estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[], ajustes:[],
         interesAbonado:0, penalidadHabilitada
       });
@@ -454,6 +461,7 @@ function openClientModal(clientId){
   document.getElementById('c_email').value = c ? c.email : '';
   document.getElementById('c_direccion').value = c ? c.direccion : '';
   document.getElementById('c_ciudad').value = c ? c.ciudad : '';
+  document.getElementById('c_pais').value = c ? (c.pais || 'Estados Unidos') : 'Estados Unidos';
   document.getElementById('c_estado').value = c ? c.estado : 'NV';
   document.getElementById('c_fechaNacimiento').value = c ? (c.fechaNacimiento || (c.anioNacimiento ? c.anioNacimiento + '-01-01' : '')) : '';
   document.getElementById('c_codigo').value = c ? c.codigo : '';
@@ -466,19 +474,15 @@ function openClientModal(clientId){
 function closeClientModal(){ document.getElementById('clientModalOverlay').classList.remove('show'); }
 
 function regenerateClientCodigoField(){
-  const nombre = document.getElementById('c_nombre').value.trim();
-  const fechaNacimiento = document.getElementById('c_fechaNacimiento').value;
-  const estado = document.getElementById('c_estado').value;
-  if(!nombre || !fechaNacimiento){ showToast('Completa nombre y fecha de nacimiento primero'); return; }
-  const anio = parseDate(fechaNacimiento).getFullYear();
-  document.getElementById('c_codigo').value = generateClientCodigo(nombre, anio, estado);
+  document.getElementById('c_codigo').value = generateClientCodigo();
 }
 
 async function saveClient(){
   const nombre = document.getElementById('c_nombre').value.trim();
   const pin = document.getElementById('c_pin').value.trim();
   const fechaNacimiento = document.getElementById('c_fechaNacimiento').value;
-  const estado = document.getElementById('c_estado').value;
+  const pais = document.getElementById('c_pais').value.trim() || 'Estados Unidos';
+  const estado = document.getElementById('c_estado').value.trim();
   const direccion = document.getElementById('c_direccion').value.trim();
   const ciudad = document.getElementById('c_ciudad').value.trim();
   const telefono = document.getElementById('c_telefono').value.trim();
@@ -488,7 +492,6 @@ async function saveClient(){
   if(!nombre){ showToast('Ingresa el nombre del cliente'); return; }
   const fechaNacDate = fechaNacimiento ? parseDate(fechaNacimiento) : null;
   if(!fechaNacDate || fechaNacDate > new Date() || fechaNacDate.getFullYear() < 1900){ showToast('Ingresa una fecha de nacimiento válida'); return; }
-  const anioNacimiento = fechaNacDate.getFullYear();
 
   const editing = editingClientId ? state.clients.find(c => c.id === editingClientId) : null;
   if(!editing && pin.length < 4){ showToast('La contraseña del cliente debe tener al menos 4 caracteres'); return; }
@@ -499,15 +502,15 @@ async function saveClient(){
     if(state.clients.some(c => c.codigo === codigoInput && c.id !== editingClientId)){ showToast('Ese ID de cliente ya está en uso'); return; }
     codigo = codigoInput;
   } else {
-    codigo = editing ? editing.codigo : generateClientCodigo(nombre, anioNacimiento, estado);
+    codigo = editing ? editing.codigo : generateClientCodigo();
   }
 
   if(editing){
-    if(editing.direccion !== direccion || editing.ciudad !== ciudad || editing.estado !== estado){
+    if(editing.direccion !== direccion || editing.ciudad !== ciudad || editing.estado !== estado || editing.pais !== pais){
       editing.historialDirecciones = editing.historialDirecciones || [];
-      editing.historialDirecciones.push({ direccion: editing.direccion, ciudad: editing.ciudad, estado: editing.estado, fecha: localDateStr() });
+      editing.historialDirecciones.push({ direccion: editing.direccion, ciudad: editing.ciudad, estado: editing.estado, pais: editing.pais, fecha: localDateStr() });
     }
-    Object.assign(editing, { nombre, telefono, email, direccion, ciudad, estado, fechaNacimiento, notas, codigo });
+    Object.assign(editing, { nombre, telefono, email, direccion, ciudad, estado, pais, fechaNacimiento, notas, codigo });
     if(pin) editing.pinHash = await hashPin(pin);
     await saveState();
     closeClientModal();
@@ -518,7 +521,7 @@ async function saveClient(){
   }
 
   const client = {
-    id: uid(), nombre, telefono, email, direccion, ciudad, estado, fechaNacimiento, notas,
+    id: uid(), nombre, telefono, email, direccion, ciudad, estado, pais, fechaNacimiento, notas,
     codigo, pinHash: await hashPin(pin),
     historialDirecciones: [],
     createdAt: Date.now()
@@ -542,10 +545,21 @@ function deleteClient(id){
   if(currentAdminTab === 'clientdetail') closeClientDetail(); else renderClients();
 }
 
+let currentClientSort = 'nombre';
+function setClientSort(mode){
+  currentClientSort = mode;
+  document.querySelectorAll('#clientSortRow .chip').forEach(b => b.classList.toggle('active', b.dataset.sort === mode));
+  renderClients();
+}
+
 function renderClients(){
   const q = (document.getElementById('clientSearch').value || '').toLowerCase();
   const list = document.getElementById('clientsList');
-  const items = state.clients.filter(c => c.nombre.toLowerCase().includes(q) || c.codigo.toLowerCase().includes(q));
+  const items = state.clients.filter(c =>
+    c.nombre.toLowerCase().includes(q) || c.codigo.toLowerCase().includes(q) ||
+    (c.ciudad||'').toLowerCase().includes(q) || (c.estado||'').toLowerCase().includes(q) ||
+    (c.pais||'').toLowerCase().includes(q)
+  );
   if(!items.length){
     list.innerHTML = '';
     document.getElementById('emptyStateGlobal').style.display = state.clients.length ? 'none' : 'block';
@@ -553,7 +567,7 @@ function renderClients(){
     return;
   }
   document.getElementById('emptyStateGlobal').style.display = 'none';
-  list.innerHTML = items.map(c => {
+  const renderCard = c => {
     const loanCount = state.loans.filter(l => l.clientId === c.id).length;
     const score = computeCreditScore(c);
     return `<div class="item-card" onclick="openClientDetail('${c.id}')">
@@ -563,7 +577,7 @@ function renderClients(){
       </div>
       <div class="item-meta">
         ${c.telefono ? `<div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-phone"/></svg> ${escapeHtml(c.telefono)}</div>` : ''}
-        ${c.estado ? `<div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-pin"/></svg> ${escapeHtml(c.ciudad||'')} ${c.estado}</div>` : ''}
+        ${c.estado ? `<div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-pin"/></svg> ${escapeHtml(c.ciudad||'')} ${escapeHtml(c.estado)}${c.pais ? ' · ' + escapeHtml(c.pais) : ''}</div>` : ''}
       </div>
       <div class="item-actions" onclick="event.stopPropagation()">
         <button class="mini-btn primary" onclick="openClientDetail('${c.id}')"><svg class="icon"><use href="#i-user"/></svg> Ver detalle</button>
@@ -571,7 +585,21 @@ function renderClients(){
         <button class="mini-btn danger" onclick="deleteClient('${c.id}')"><svg class="icon"><use href="#i-trash"/></svg></button>
       </div>
     </div>`;
-  }).join('');
+  };
+  items.sort((a,b) => a.nombre.localeCompare(b.nombre, 'es'));
+  if(currentClientSort === 'nombre'){
+    list.innerHTML = items.map(renderCard).join('');
+  } else {
+    const keyFn = currentClientSort === 'pais' ? (c => c.pais || 'Sin país') : (c => c.estado || 'Sin estado');
+    const groups = new Map();
+    for(const c of items){
+      const k = keyFn(c);
+      if(!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(c);
+    }
+    const keys = Array.from(groups.keys()).sort((a,b) => a.localeCompare(b, 'es'));
+    list.innerHTML = keys.map(k => `<div class="group-header">${escapeHtml(k)} · ${groups.get(k).length}</div>` + groups.get(k).map(renderCard).join('')).join('');
+  }
 }
 function viewClientCode(id){
   const c = state.clients.find(x => x.id === id);
@@ -660,14 +688,14 @@ function renderClientDetail(){
     <div class="item-meta" style="flex-direction:column;gap:8px;align-items:flex-start;">
       <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-phone"/></svg> ${escapeHtml(client.telefono || '—')}</div>
       <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-mail"/></svg> ${escapeHtml(client.email || '—')}</div>
-      <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-pin"/></svg> ${escapeHtml(client.direccion || '—')}, ${escapeHtml(client.ciudad || '—')}, ${client.estado || '—'}</div>
+      <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-pin"/></svg> ${escapeHtml(client.direccion || '—')}, ${escapeHtml(client.ciudad || '—')}, ${escapeHtml(client.estado || '—')}${client.pais ? ', ' + escapeHtml(client.pais) : ''}</div>
       <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-cake"/></svg> ${client.fechaNacimiento ? formatDateEs(client.fechaNacimiento) : (client.anioNacimiento || '—')}</div>
       ${client.notas ? `<div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-doc"/></svg> ${escapeHtml(client.notas)}</div>` : ''}
     </div>`;
 
   const hist = client.historialDirecciones || [];
   document.getElementById('cd_addressHistory').innerHTML = hist.length ? hist.slice().reverse().map(h => `
-    <div class="item-card"><div class="item-sub">${formatDateEs(h.fecha)}</div><div>${escapeHtml(h.direccion || '—')}, ${escapeHtml(h.ciudad || '—')}, ${h.estado || '—'}</div></div>
+    <div class="item-card"><div class="item-sub">${formatDateEs(h.fecha)}</div><div>${escapeHtml(h.direccion || '—')}, ${escapeHtml(h.ciudad || '—')}, ${escapeHtml(h.estado || '—')}${h.pais ? ', ' + escapeHtml(h.pais) : ''}</div></div>
   `).join('') : '<div class="empty-state" style="padding:20px;"><div>Sin cambios de dirección registrados.</div></div>';
 
   document.getElementById('cd_loansList').innerHTML = loans.length ? loans.map(loan => {
@@ -709,6 +737,9 @@ function setTasaTipo(t){
   currentTasaTipo = t;
   document.getElementById('tipo_simple').classList.toggle('active', t==='simple');
   document.getElementById('tipo_apr').classList.toggle('active', t==='apr');
+  document.getElementById('tipo_fijo').classList.toggle('active', t==='fijo');
+  document.getElementById('l_tasaWrap').style.display = t==='fijo' ? 'none' : '';
+  document.getElementById('l_montoTotalWrap').style.display = t==='fijo' ? '' : 'none';
   document.getElementById('l_tasaLabel').textContent = t==='simple' ? 'Tasa por periodo (%)' : 'Tasa anual nominal / APR (%)';
   updateLoanPreview();
 }
@@ -730,6 +761,7 @@ function openLoanModal(){
   sel.innerHTML = state.clients.map(c => `<option value="${c.id}">${escapeHtml(c.nombre)}</option>`).join('') || '<option value="">— crea un cliente primero —</option>';
   document.getElementById('l_principal').value = '';
   document.getElementById('l_tasa').value = '';
+  document.getElementById('l_montoTotal').value = '';
   document.getElementById('l_numCuotas').value = '';
   document.getElementById('l_diasPersonalizado').value = '';
   document.getElementById('l_diaCobro').value = '';
@@ -745,14 +777,18 @@ function closeLoanModal(){ document.getElementById('loanModalOverlay').classList
 function draftLoanFromForm(){
   const principal = parseFloat(document.getElementById('l_principal').value);
   const tasa = parseFloat(document.getElementById('l_tasa').value);
+  const montoTotal = parseFloat(document.getElementById('l_montoTotal').value);
   const numCuotas = parseInt(document.getElementById('l_numCuotas').value, 10);
   const diasPersonalizado = parseInt(document.getElementById('l_diasPersonalizado').value, 10);
   const diaCobro = parseInt(document.getElementById('l_diaCobro').value, 10);
   const fechaInicio = document.getElementById('l_fechaInicio').value;
-  if(!(principal>0) || !(tasa>=0) || !(numCuotas>0) || !fechaInicio) return null;
+  if(!(principal>0) || !(numCuotas>0) || !fechaInicio) return null;
+  if(currentTasaTipo === 'fijo'){
+    if(!(montoTotal > principal)) return null;
+  } else if(!(tasa>=0)) return null;
   if(currentFrecuencia==='personalizado' && !(diasPersonalizado>0)) return null;
   if(currentFrecuencia==='mensual' && !(diaCobro>=1 && diaCobro<=28)) return null;
-  return { principal, tasa, tasaTipo: currentTasaTipo, frecuencia: currentFrecuencia, diasPersonalizado, diaCobro, numCuotas, fechaInicio, penalidadHabilitada: currentPenalidadHabilitada };
+  return { principal, tasa: currentTasaTipo==='fijo' ? 0 : tasa, montoTotal: currentTasaTipo==='fijo' ? montoTotal : null, tasaTipo: currentTasaTipo, frecuencia: currentFrecuencia, diasPersonalizado, diaCobro, numCuotas, fechaInicio, penalidadHabilitada: currentPenalidadHabilitada };
 }
 
 function updateLoanPreview(){
@@ -776,18 +812,18 @@ async function saveLoan(){
   if(!clientId){ showToast('Selecciona un cliente'); return; }
   const client = state.clients.find(c => c.id === clientId);
   const draft = draftLoanFromForm();
-  if(!draft){ showToast('Completa monto, tasa, # de cuotas y fecha correctamente'); return; }
+  if(!draft){ showToast('Completa monto, tasa (o monto a pagar), # de cuotas y fecha correctamente'); return; }
   const cuotas = buildSchedule(draft);
   if(!cuotas.length){ showToast('No se pudo calcular el calendario de pagos'); return; }
   const loan = {
     id: uid(), clientId,
-    principal: draft.principal, tasa: draft.tasa, tasaTipo: draft.tasaTipo,
+    principal: draft.principal, tasa: draft.tasa, tasaTipo: draft.tasaTipo, montoTotal: draft.montoTotal || null,
     frecuencia: draft.frecuencia, diasPersonalizado: draft.diasPersonalizado || null,
     diaCobro: draft.diaCobro || null, penalidadHabilitada: draft.penalidadHabilitada,
     numCuotas: draft.numCuotas, fechaInicio: draft.fechaInicio,
     cuotas, createdAt: Date.now()
   };
-  loan.folio = generateLoanFolio(client.estado, loan.fechaInicio, loan.principal);
+  loan.folio = generateLoanFolio(client.estado, loan.fechaInicio);
   state.loans.push(loan);
   await saveState();
   closeLoanModal();
@@ -855,7 +891,8 @@ function renderLoanDetail(){
   if(!loan) return;
   const client = state.clients.find(c => c.id === loan.clientId);
   document.getElementById('ld_clientName').textContent = client ? client.nombre : '—';
-  document.getElementById('ld_sub').textContent = `${loan.folio} · ${fmtMoney(loan.principal)} · ${loan.tasa}% ${loan.tasaTipo==='simple'?'simple':'APR'} · ${FREQ_LABEL[loan.frecuencia]}`;
+  const tasaLabel = loan.tasaTipo === 'fijo' ? `monto fijo, paga ${fmtMoney(loan.montoTotal)}` : `${loan.tasa}% ${loan.tasaTipo==='simple'?'simple':'APR'}`;
+  document.getElementById('ld_sub').textContent = `${loan.folio} · ${fmtMoney(loan.principal)} · ${tasaLabel} · ${FREQ_LABEL[loan.frecuencia]}`;
   const totals = loanTotals(loan);
   document.getElementById('ld_kpiPagado').textContent = fmtMoney(totals.pagado);
   document.getElementById('ld_kpiSaldo').textContent = fmtMoney(totals.saldo);
@@ -1286,6 +1323,7 @@ const CONTRACT_STRINGS = {
     s3: '3. INTEREST',
     interestSimple: (t,f,it) => 'Interest is calculated as simple interest at a fixed rate of ' + t + '% per ' + f + ' payment period, applied to the original principal amount, for a total interest of ' + it + ' over the life of the loan.',
     interestApr: (t,it) => 'Interest is calculated on an amortizing basis (declining balance), at a nominal annual rate of ' + t + '%, applied to the outstanding principal balance each payment period, for a total interest of ' + it + ' over the life of the loan.',
+    interestFijo: (p,total,it) => 'This loan uses a fixed repayment amount agreed in advance: the borrower receives ' + p + ' and agrees to repay a fixed total of ' + total + ', for a total finance charge of ' + it + ' over the life of the loan, regardless of any percentage rate.',
     aprDisclosure: (a) => 'Disclosure — Effective Annual Percentage Rate (APR): ' + a + '%. This figure reflects the true annualized cost of this loan based on the payment schedule below, consistent with standard Truth in Lending Act (TILA) disclosure practice.',
     s4: '4. PAYMENT SCHEDULE',
     schedule: (n,f,extra,start,total) => 'Total of ' + n + ' payments, ' + f + extra + ', beginning ' + start + '. Total amount to be repaid if all payments are made on time: ' + total + '.',
@@ -1319,6 +1357,7 @@ const CONTRACT_STRINGS = {
     s3: '3. INTERÉS',
     interestSimple: (t,f,it) => 'El interés se calcula como interés simple a una tasa fija de ' + t + '% por cada periodo de pago ' + f + ', aplicado sobre el monto de capital original, para un interés total de ' + it + ' durante la vida del préstamo.',
     interestApr: (t,it) => 'El interés se calcula sobre saldo insoluto (amortización decreciente), a una tasa anual nominal de ' + t + '%, aplicada sobre el saldo de capital pendiente en cada periodo de pago, para un interés total de ' + it + ' durante la vida del préstamo.',
+    interestFijo: (p,total,it) => 'Este préstamo usa un monto fijo de pago acordado por adelantado: el prestatario recibe ' + p + ' y se compromete a pagar un total fijo de ' + total + ', para un cargo financiero total de ' + it + ' durante la vida del préstamo, independientemente de cualquier tasa porcentual.',
     aprDisclosure: (a) => 'Divulgación — Tasa de Interés Anual Efectiva (APR): ' + a + '%. Esta cifra refleja el costo anualizado real de este préstamo con base en el calendario de pagos a continuación, siguiendo la práctica estándar de divulgación equivalente a la Truth in Lending Act (TILA) de EE. UU.',
     s4: '4. CALENDARIO DE PAGOS',
     schedule: (n,f,extra,start,total) => 'Total de ' + n + ' pagos, de frecuencia ' + f + extra + ', comenzando el ' + start + '. Monto total a pagar si todos los pagos se realizan a tiempo: ' + total + '.',
@@ -1417,6 +1456,8 @@ function generateContractPDF(loanId, lang){
   heading(T.s3);
   if(loan.tasaTipo === 'simple'){
     para(T.interestSimple(loan.tasa, freqLabel, fmtMoney(interesTotal)));
+  } else if(loan.tasaTipo === 'fijo'){
+    para(T.interestFijo(fmtMoney(loan.principal), fmtMoney(loan.montoTotal), fmtMoney(interesTotal)));
   } else {
     para(T.interestApr(loan.tasa, fmtMoney(interesTotal)));
   }
@@ -1496,9 +1537,10 @@ function showToast(msg){
 
 function populateStateSelects(){
   const opts = US_STATES.map(([code,name]) => `<option value="${code}">${name}</option>`).join('');
-  ['su_estado','c_estado','s_estado'].forEach(id => { document.getElementById(id).innerHTML = opts; });
+  ['su_estado','s_estado'].forEach(id => { document.getElementById(id).innerHTML = opts; });
   document.getElementById('su_estado').value = 'NV';
   document.getElementById('s_estado').value = 'NV';
+  document.getElementById('estadosDatalist').innerHTML = opts;
 }
 
 /* ============ UPDATE BANNER ============ */
