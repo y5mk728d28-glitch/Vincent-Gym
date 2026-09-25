@@ -7,15 +7,15 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="theme-color" content="#060907">
-<meta name="build-version" content="2026-09-09-01">
+<meta name="build-version" content="2026-09-25-01">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Vincent Bank">
-<link rel="apple-touch-icon" href="logo.png?v=2026-09-09-01">
-<link rel="icon" href="logo.png?v=2026-09-09-01">
+<link rel="apple-touch-icon" href="logo.png?v=2026-09-25-01">
+<link rel="icon" href="logo.png?v=2026-09-25-01">
 <title>Vincent Bank — Préstamos</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="jspdf.umd.min.js?v=2026-09-09-01"></script>
+<script src="jspdf.umd.min.js?v=2026-09-25-01"></script>
 <style>
 :root{
   --bg:#0a0805;
@@ -165,10 +165,15 @@ a{color:var(--accent2);}
 .freq-opt{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 6px;text-align:center;font-size:12px;font-weight:600;color:var(--muted);}
 .freq-opt.active{background:var(--accent-soft);border-color:var(--border-strong);color:var(--accent2);}
 .type-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.type-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
 .type-opt{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 8px;text-align:center;}
 .type-opt.active{background:var(--accent-soft);border-color:var(--border-strong);}
 .type-opt .t-name{font-size:13px;font-weight:700;}
 .type-opt .t-desc{font-size:10.5px;color:var(--muted);margin-top:2px;}
+.chip{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:7px 14px;font-size:12.5px;color:var(--muted);font-weight:500;}
+.chip.active{background:var(--accent-soft);border-color:var(--border-strong);color:var(--accent2);}
+.group-header{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent2);margin:14px 0 2px;}
+.group-header:first-child{margin-top:0;}
 .preview-box{background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-md);padding:14px 16px;margin-top:14px;}
 .preview-row{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;color:var(--muted);}
 .preview-row b{color:var(--text);font-weight:700;}
@@ -266,7 +271,7 @@ a{color:var(--accent2);}
   <div class="center-wrap">
     <div class="auth-card">
       <div id="su_backWrap" style="margin-bottom:10px;display:none;"><button class="mini-btn" style="flex:none;padding:6px 12px;" onclick="showLoginView()"><svg class="icon"><use href="#i-arrow-left"/></svg> Volver</button></div>
-      <div class="auth-logo"><img src="logo.png?v=2026-09-09-01" alt="Vincent Bank"></div>
+      <div class="auth-logo"><img src="logo.png?v=2026-09-25-01" alt="Vincent Bank"></div>
       <div class="auth-title">Crear cuenta de administrador</div>
       <div class="auth-sub">Usuario, datos del prestamista y contraseña</div>
       <div class="form-group">
@@ -312,7 +317,7 @@ a{color:var(--accent2);}
 <div class="view" id="view-login">
   <div class="center-wrap">
     <div class="auth-card">
-      <div class="auth-logo"><img src="logo.png?v=2026-09-09-01" alt="Vincent Bank"></div>
+      <div class="auth-logo"><img src="logo.png?v=2026-09-25-01" alt="Vincent Bank"></div>
       <div class="auth-title">Vincent Bank</div>
       <div class="auth-sub">Selecciona cómo quieres entrar</div>
       <div class="tabs-row">
@@ -333,7 +338,7 @@ a{color:var(--accent2);}
       <div id="loginPanelCliente" style="display:none">
         <div class="form-group">
           <label class="form-label">ID de cliente</label>
-          <input class="form-input" id="li_clientCode" style="text-transform:uppercase" maxlength="11" placeholder="Ej. MP98NV12345">
+          <input class="form-input" id="li_clientCode" style="text-transform:uppercase" maxlength="20" placeholder="Ej. C-0007">
         </div>
         <div class="form-group">
           <label class="form-label">Contraseña</label>
@@ -353,7 +358,7 @@ a{color:var(--accent2);}
 <!-- ============ ADMIN APP ============ -->
 <div class="view" id="view-admin">
   <header class="topbar">
-    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-09-09-01" alt="Vincent Bank"></span><span class="brand-name">Vincent Bank</span></div>
+    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-09-25-01" alt="Vincent Bank"></span><span class="brand-name">Vincent Bank</span></div>
     <div class="topbar-actions">
       <button class="icon-btn" onclick="openSettings()"><svg class="icon"><use href="#i-settings"/></svg></button>
     </div>
@@ -396,6 +401,11 @@ a{color:var(--accent2);}
   <!-- Clientes tab -->
   <div id="admin-tab-clientes" class="admin-tab" style="display:none">
     <input class="search-input" id="clientSearch" style="margin:14px 18px" placeholder="Buscar cliente..." oninput="renderClients()">
+    <div id="clientSortRow" style="display:flex;gap:8px;padding:0 18px 10px;">
+      <button class="chip active" data-sort="nombre" onclick="setClientSort('nombre')">Nombre A-Z</button>
+      <button class="chip" data-sort="pais" onclick="setClientSort('pais')">Por país</button>
+      <button class="chip" data-sort="estado" onclick="setClientSort('estado')">Por estado</button>
+    </div>
     <div class="list-wrap" id="clientsList"></div>
   </div>
 
@@ -482,7 +492,7 @@ a{color:var(--accent2);}
 <!-- ============ CLIENT APP ============ -->
 <div class="view" id="view-client">
   <header class="topbar">
-    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-09-09-01" alt="Vincent Bank"></span><span class="brand-name" id="clientBrandName">Vincent Bank</span></div>
+    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-09-25-01" alt="Vincent Bank"></span><span class="brand-name" id="clientBrandName">Vincent Bank</span></div>
     <div class="topbar-actions"><button class="icon-btn" onclick="logout()"><svg class="icon"><use href="#i-door"/></svg></button></div>
   </header>
   <div style="padding:6px 18px;">
@@ -525,20 +535,33 @@ a{color:var(--accent2);}
         <label class="form-label">Dirección</label>
         <input class="form-input" id="c_direccion" placeholder="Calle, número">
       </div>
+      <div class="form-group">
+        <label class="form-label">País</label>
+        <input class="form-input" id="c_pais" list="paisesDatalist" placeholder="Estados Unidos">
+        <datalist id="paisesDatalist">
+          <option value="Estados Unidos">
+          <option value="República Dominicana">
+          <option value="México">
+          <option value="Colombia">
+          <option value="Venezuela">
+          <option value="Panamá">
+          <option value="Puerto Rico">
+        </datalist>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Ciudad</label>
           <input class="form-input" id="c_ciudad" placeholder="Ciudad">
         </div>
         <div class="form-group">
-          <label class="form-label">Estado (EEUU)</label>
-          <select class="form-select" id="c_estado"></select>
+          <label class="form-label">Estado / provincia</label>
+          <input class="form-input" id="c_estado" list="estadosDatalist" placeholder="NV">
+          <datalist id="estadosDatalist"></datalist>
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Fecha de nacimiento</label>
         <input class="form-input" id="c_fechaNacimiento" type="date" min="1900-01-01" max="2026-12-31">
-        <div class="form-hint">El año se usa para el ID de cliente. Si te equivocas, corrígela aquí y toca "Regenerar" abajo.</div>
       </div>
       <div class="form-group">
         <label class="form-label" id="c_pinLabel">Contraseña de acceso del cliente</label>
@@ -551,7 +574,7 @@ a{color:var(--accent2);}
           <input class="form-input mono" id="c_codigo" style="flex:1;text-transform:uppercase" placeholder="Se genera automático al guardar">
           <button class="mini-btn" style="flex:none;padding:0 14px;" onclick="regenerateClientCodigoField()"><svg class="icon"><use href="#i-renew"/></svg> Regenerar</button>
         </div>
-        <div class="form-hint">Formato: iniciales + año de nacimiento + estado + folio. Si corregiste la fecha de nacimiento (o el nombre/estado), toca "Regenerar" para recalcularlo, o escribe uno personalizado (debe ser único). Si ya compartiste el código anterior con el cliente, avísale del cambio.</div>
+        <div class="form-hint">Formato: número secuencial simple (ej. C-0007), sin datos personales codificados. Toca "Regenerar" para tomar el siguiente número disponible, o escribe uno personalizado (debe ser único). Si ya compartiste el código anterior con el cliente, avísale del cambio.</div>
       </div>
       <div class="form-group">
         <label class="form-label">Notas</label>
@@ -613,7 +636,7 @@ a{color:var(--accent2);}
       </div>
 
       <div class="section-divider">Tipo de interés</div>
-      <div class="type-grid">
+      <div class="type-grid-3">
         <button class="type-opt active" id="tipo_simple" onclick="setTasaTipo('simple')">
           <div class="t-name">Simple</div>
           <div class="t-desc">% fijo por periodo sobre el capital original</div>
@@ -622,11 +645,19 @@ a{color:var(--accent2);}
           <div class="t-name">APR (bancario)</div>
           <div class="t-desc">Amortizado, interés sobre saldo restante</div>
         </button>
+        <button class="type-opt" id="tipo_fijo" onclick="setTasaTipo('fijo')">
+          <div class="t-name">Monto fijo</div>
+          <div class="t-desc">Ej. prestas $20, cobras $40 — sin usar %</div>
+        </button>
       </div>
       <div class="form-row" style="margin-top:14px;">
-        <div class="form-group">
+        <div class="form-group" id="l_tasaWrap">
           <label class="form-label" id="l_tasaLabel">Tasa por periodo (%)</label>
           <input class="form-input" id="l_tasa" type="number" min="0" step="0.01" placeholder="10" oninput="updateLoanPreview()">
+        </div>
+        <div class="form-group" id="l_montoTotalWrap" style="display:none;">
+          <label class="form-label">Monto total a pagar ($)</label>
+          <input class="form-input" id="l_montoTotal" type="number" min="0" step="0.01" placeholder="Ej. 40" oninput="updateLoanPreview()">
         </div>
         <div class="form-group">
           <label class="form-label"># de cuotas</label>
@@ -864,12 +895,11 @@ a{color:var(--accent2);}
 
       <div class="section-divider">Cómo se generan los IDs</div>
       <div class="info-box">
-        <b>ID de cliente</b> (fijo de por vida, es su código de acceso): Iniciales del nombre + año de nacimiento (2 díg.) + estado + 5 dígitos al azar.<br>
-        Ej. <span class="mono">MR90NV12345</span> = Miguel Rodriguez, nacido en 1990, Nevada.<br><br>
-        <b>Folio de préstamo</b>: Estado del cliente + año del préstamo + categoría por monto + 5 dígitos al azar.<br>
-        Categoría: <b>C</b> = menos de $100 · <b>M</b> = $100–$9,999 · <b>D</b> = $10,000 o más.<br>
-        Ej. <span class="mono">NV26M12345</span> = Nevada, 2026, categoría M ($100–$9,999).<br><br>
-        Ambos se generan automático al crear el cliente o el préstamo — no necesitas hacer nada. Si un cliente o préstamo es de antes de esta función, se le asigna el nuevo formato la próxima vez que abras la app. Puedes personalizar el ID de un cliente cuando quieras desde "Editar cliente" — si ya le habías compartido el código anterior, avísale del cambio.
+        <b>ID de cliente</b> (fijo de por vida, es su código de acceso): un número secuencial simple, sin datos personales codificados.<br>
+        Ej. <span class="mono">C-0007</span> = el séptimo cliente registrado.<br><br>
+        <b>Folio de préstamo</b>: Estado del cliente + año del préstamo + número secuencial.<br>
+        Ej. <span class="mono">NV26-0012</span> = Nevada, préstamo #12 creado en 2026.<br><br>
+        Ambos se generan automático al crear el cliente o el préstamo — no necesitas hacer nada. Si un cliente o préstamo tiene un ID de un formato anterior (de una versión vieja de la app), se le asigna el nuevo formato la próxima vez que abras la app, en el mismo orden en que fueron creados. Puedes personalizar el ID de un cliente cuando quieras desde "Editar cliente" — si ya le habías compartido el código anterior, avísale del cambio.
       </div>
 
       <div class="section-divider">Respaldo de datos</div>
@@ -889,6 +919,6 @@ a{color:var(--accent2);}
 
 <div class="toast" id="toast"></div>
 
-<script src="prestamos.js?v=2026-09-09-01"></script>
+<script src="prestamos.js?v=2026-09-25-01"></script>
 </body>
 </html>
