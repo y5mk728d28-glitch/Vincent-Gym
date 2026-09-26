@@ -317,9 +317,31 @@ function loanIsLate(loan){
 
 /* ============ AUTH / SESSION ============ */
 let session = null; // { role:'admin', adminId } or { role:'cliente', clientId }
+const KEEP_LOGIN_KEY = 'vl_keep_logged_in';
+const PERSIST_SESSION_KEY = 'vl_session_persist';
 
 function currentAdmin(){
   return session && session.role === 'admin' ? state.admins.find(a => a.id === session.adminId) : null;
+}
+
+function isKeepLoginEnabled(){
+  try { return localStorage.getItem(KEEP_LOGIN_KEY) === '1'; } catch(e){ return false; }
+}
+function setKeepLoginEnabled(v){
+  try {
+    localStorage.setItem(KEEP_LOGIN_KEY, v ? '1' : '0');
+    if(v && session) localStorage.setItem(PERSIST_SESSION_KEY, JSON.stringify(session));
+    else localStorage.removeItem(PERSIST_SESSION_KEY);
+  } catch(e){}
+}
+/* Always keeps the fast, tab-scoped session; additionally mirrors it to
+   localStorage (survives closing the browser/app entirely) only when the
+   admin opted in via the "mantener sesión iniciada" setting. */
+function persistSession(){
+  try {
+    sessionStorage.setItem('vl_session', JSON.stringify(session));
+    if(isKeepLoginEnabled()) localStorage.setItem(PERSIST_SESSION_KEY, JSON.stringify(session));
+  } catch(e){}
 }
 
 async function completeSetup(){
@@ -346,7 +368,7 @@ async function completeSetup(){
   state.admins.push(admin);
   await saveState();
   session = { role:'admin', adminId: admin.id };
-  sessionStorage.setItem('vl_session', JSON.stringify(session));
+  persistSession();
   showAdminView();
 }
 
@@ -367,7 +389,7 @@ async function loginAdmin(){
   const h = await hashPin(pin);
   if(h !== admin.passwordHash){ err.textContent = 'Contraseña incorrecta.'; return; }
   session = { role:'admin', adminId: admin.id };
-  sessionStorage.setItem('vl_session', JSON.stringify(session));
+  persistSession();
   document.getElementById('li_adminUser').value = '';
   document.getElementById('li_adminPin').value = '';
   err.textContent = '';
@@ -383,7 +405,7 @@ async function loginClient(){
   const h = await hashPin(pin);
   if(h !== client.pinHash){ err.textContent = 'Contraseña incorrecta.'; return; }
   session = { role:'cliente', clientId: client.id };
-  sessionStorage.setItem('vl_session', JSON.stringify(session));
+  persistSession();
   document.getElementById('li_clientCode').value = '';
   document.getElementById('li_clientPin').value = '';
   err.textContent = '';
@@ -392,7 +414,7 @@ async function loginClient(){
 
 function logout(){
   session = null;
-  sessionStorage.removeItem('vl_session');
+  try { sessionStorage.removeItem('vl_session'); localStorage.removeItem(PERSIST_SESSION_KEY); } catch(e){}
   closeSettings();
   showLoginView();
 }
@@ -697,6 +719,18 @@ function renderClientDetail(){
   document.getElementById('cd_addressHistory').innerHTML = hist.length ? hist.slice().reverse().map(h => `
     <div class="item-card"><div class="item-sub">${formatDateEs(h.fecha)}</div><div>${escapeHtml(h.direccion || '—')}, ${escapeHtml(h.ciudad || '—')}, ${escapeHtml(h.estado || '—')}${h.pais ? ', ' + escapeHtml(h.pais) : ''}</div></div>
   `).join('') : '<div class="empty-state" style="padding:20px;"><div>Sin cambios de dirección registrados.</div></div>';
+
+  document.getElementById('cd_paymentLedger').innerHTML = ledger.length ? ledger
+    .slice()
+    .sort((a,b) => parseDate(b.fecha) - parseDate(a.fecha))
+    .map(p => `<div class="item-card">
+      <div class="item-top">
+        <div><div class="item-title">${fmtMoney(p.monto)}</div><div class="item-sub">${formatDateEs(p.fecha)} · ${p.folio} · cuota #${p.numero}</div></div>
+        <span class="status-badge ${p.tipo==='interes' ? 'pendiente' : 'cobrado'}">${p.tipo==='interes' ? 'Solo interés' : 'Pago completo'}</span>
+      </div>
+      <div class="item-meta"><div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-cash"/></svg> ${escapeHtml(p.metodo || '—')}</div></div>
+    </div>`).join('')
+    : '<div class="empty-state" style="padding:20px;"><div>Aún no hay pagos registrados.</div></div>';
 
   document.getElementById('cd_loansList').innerHTML = loans.length ? loans.map(loan => {
     const totals = loanTotals(loan);
@@ -1246,6 +1280,7 @@ function openSettings(){
   document.getElementById('s_username').value = admin.username;
   document.getElementById('s_newPin1').value = '';
   document.getElementById('s_newPin2').value = '';
+  document.getElementById('s_keepLogin').checked = isKeepLoginEnabled();
   document.getElementById('settingsOverlay').classList.add('show');
 }
 function closeSettings(){ document.getElementById('settingsOverlay').classList.remove('show'); }
@@ -1567,7 +1602,7 @@ function init(){
   populateStateSelects();
 
   try {
-    const raw = sessionStorage.getItem('vl_session');
+    const raw = sessionStorage.getItem('vl_session') || (isKeepLoginEnabled() ? localStorage.getItem(PERSIST_SESSION_KEY) : null);
     if(raw) session = JSON.parse(raw);
   } catch(e){}
 

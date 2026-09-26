@@ -7,15 +7,15 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="theme-color" content="#060907">
-<meta name="build-version" content="2026-09-25-01">
+<meta name="build-version" content="2026-09-26-01">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Vincent Bank">
-<link rel="apple-touch-icon" href="logo.png?v=2026-09-25-01">
-<link rel="icon" href="logo.png?v=2026-09-25-01">
+<link rel="apple-touch-icon" href="logo.png?v=2026-09-26-01">
+<link rel="icon" href="logo.png?v=2026-09-26-01">
 <title>Vincent Bank — Préstamos</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="jspdf.umd.min.js?v=2026-09-25-01"></script>
+<script src="jspdf.umd.min.js?v=2026-09-26-01"></script>
 <style>
 :root{
   --bg:#0a0805;
@@ -159,6 +159,8 @@ a{color:var(--accent2);}
 .form-input:focus,.form-textarea:focus,.form-select:focus{border-color:var(--border-strong);}
 .form-textarea{min-height:70px;resize:vertical;}
 .form-hint{font-size:11px;color:var(--muted-dim);margin-top:5px;}
+.toggle-row{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;font-size:13.5px;font-weight:500;}
+.toggle-row input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent);flex-shrink:0;}
 .section-divider{display:flex;align-items:center;gap:8px;margin:20px 0 12px;color:var(--accent2);font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;}
 .section-divider::after{content:'';flex:1;height:1px;background:var(--border);}
 .freq-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
@@ -271,7 +273,7 @@ a{color:var(--accent2);}
   <div class="center-wrap">
     <div class="auth-card">
       <div id="su_backWrap" style="margin-bottom:10px;display:none;"><button class="mini-btn" style="flex:none;padding:6px 12px;" onclick="showLoginView()"><svg class="icon"><use href="#i-arrow-left"/></svg> Volver</button></div>
-      <div class="auth-logo"><img src="logo.png?v=2026-09-25-01" alt="Vincent Bank"></div>
+      <div class="auth-logo"><img src="logo.png?v=2026-09-26-01" alt="Vincent Bank"></div>
       <div class="auth-title">Crear cuenta de administrador</div>
       <div class="auth-sub">Usuario, datos del prestamista y contraseña</div>
       <div class="form-group">
@@ -317,7 +319,7 @@ a{color:var(--accent2);}
 <div class="view" id="view-login">
   <div class="center-wrap">
     <div class="auth-card">
-      <div class="auth-logo"><img src="logo.png?v=2026-09-25-01" alt="Vincent Bank"></div>
+      <div class="auth-logo"><img src="logo.png?v=2026-09-26-01" alt="Vincent Bank"></div>
       <div class="auth-title">Vincent Bank</div>
       <div class="auth-sub">Selecciona cómo quieres entrar</div>
       <div class="tabs-row">
@@ -358,7 +360,7 @@ a{color:var(--accent2);}
 <!-- ============ ADMIN APP ============ -->
 <div class="view" id="view-admin">
   <header class="topbar">
-    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-09-25-01" alt="Vincent Bank"></span><span class="brand-name">Vincent Bank</span></div>
+    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-09-26-01" alt="Vincent Bank"></span><span class="brand-name">Vincent Bank</span></div>
     <div class="topbar-actions">
       <button class="icon-btn" onclick="openSettings()"><svg class="icon"><use href="#i-settings"/></svg></button>
     </div>
@@ -492,7 +494,7 @@ a{color:var(--accent2);}
 <!-- ============ CLIENT APP ============ -->
 <div class="view" id="view-client">
   <header class="topbar">
-    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-09-25-01" alt="Vincent Bank"></span><span class="brand-name" id="clientBrandName">Vincent Bank</span></div>
+    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-09-26-01" alt="Vincent Bank"></span><span class="brand-name" id="clientBrandName">Vincent Bank</span></div>
     <div class="topbar-actions"><button class="icon-btn" onclick="logout()"><svg class="icon"><use href="#i-door"/></svg></button></div>
   </header>
   <div style="padding:6px 18px;">
@@ -893,6 +895,13 @@ a{color:var(--accent2);}
       <button class="btn btn-secondary btn-full" style="margin-bottom:10px;" onclick="changeAdminPin()">Guardar usuario / contraseña</button>
       <div class="form-hint" style="margin-bottom:10px;">Anota tu usuario y contraseña en un lugar seguro (ej. Notas del teléfono) — como todo vive en este dispositivo, si los olvidas no hay forma de recuperarlos automáticamente.</div>
 
+      <div class="section-divider">Sesión</div>
+      <label class="toggle-row">
+        <input type="checkbox" id="s_keepLogin" onchange="setKeepLoginEnabled(this.checked)">
+        <span>Mantener sesión iniciada en este dispositivo</span>
+      </label>
+      <div class="form-hint" style="margin-bottom:10px;">Si lo activas, no te pedirá usuario y contraseña la próxima vez que abras la app en este dispositivo (útil en tu acceso directo del Dock). Desactívalo si compartes este dispositivo con alguien más.</div>
+
       <div class="section-divider">Cómo se generan los IDs</div>
       <div class="info-box">
         <b>ID de cliente</b> (fijo de por vida, es su código de acceso): un número secuencial simple, sin datos personales codificados.<br>
@@ -919,6 +928,6 @@ a{color:var(--accent2);}
 
 <div class="toast" id="toast"></div>
 
-<script src="prestamos.js?v=2026-09-25-01"></script>
+<script src="prestamos.js?v=2026-09-26-01"></script>
 </body>
 </html>
