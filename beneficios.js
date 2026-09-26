@@ -1,5 +1,5 @@
 /* ============================================================
-   Calculadora de Beneficios Pecuniario — una app diseñada por Vincent
+   Calculadora de Beneficios Pecuniarios — una app diseñada por Vincent
    Todo el estado vive en localStorage; sin backend.
    ============================================================ */
 
@@ -36,6 +36,8 @@ const I18N = {
     'precios.producto':'Producto','precios.inputs':'Inputs','precios.ganancia':'Ganancia deseada ($)','precios.ads':'Etsy Ads ($)',
     'precios.descuento':'Descuento (%)','precios.shipcliente':'Shipping cliente ($)','precios.freeship':'¿Envío gratis?',
     'opt.si':'Sí','opt.no':'No','precios.costos':'Información de costos del producto','precios.costototal':'Costo Total por Item',
+    'precios.costoseditinfo':'Todos los valores de esta sección son editables: ajústalos para este cálculo sin cambiar tu catálogo ni tus ajustes generales.',
+    'precios.subtotalfijas':'Subtotal Tarifas Fijas',
     'precios.precioganancia':'Precio y Ganancia','precios.preciominimo':'Precio mínimo de venta',
     'precios.preciosub':'cubre costos, tarifas de Etsy y tu ganancia deseada','precios.clientepaga':'Lo que paga el cliente',
     'precios.catalogotitle':'Tus productos (Inputs)',
@@ -69,6 +71,8 @@ const I18N = {
     'precios.producto':'Product','precios.inputs':'Inputs','precios.ganancia':'Desired profit ($)','precios.ads':'Etsy Ads ($)',
     'precios.descuento':'Discount (%)','precios.shipcliente':'Customer shipping ($)','precios.freeship':'Free shipping?',
     'opt.si':'Yes','opt.no':'No','precios.costos':'Product cost information','precios.costototal':'Total Cost per Item',
+    'precios.costoseditinfo':"Every value in this section is editable: adjust them for this calculation without changing your catalog or your general settings.",
+    'precios.subtotalfijas':'Fixed Fees Subtotal',
     'precios.precioganancia':'Price & Profit','precios.preciominimo':'Minimum sale price',
     'precios.preciosub':'covers costs, Etsy fees and your desired profit','precios.clientepaga':'What the customer pays',
     'precios.catalogotitle':'Your products (Inputs)',
@@ -250,6 +254,8 @@ function enterApp(){
   renderCurrencyPill();
   goTo('dashboard');
   renderAll();
+  initCalcFeeDefaults();
+  onCalcProductChange();
 }
 
 /* ============ NAV ============ */
@@ -338,33 +344,38 @@ function changeLanguage(lang){
 function saveRegion(val){ data.settings.region = val; saveRoot(); }
 function saveStoreName(val){ account.tienda = val || account.tienda; saveRoot(); document.getElementById('brandStoreName').textContent = account.tienda; }
 
-/* ============ FEES ============ */
-function computeFor(product, inputs){
-  const fees = data.settings.fees;
-  const CP = product ? product.costoProduccion : 0;
-  const SC = product ? product.shippingCosto : 0;
+/* ============ FEES ============
+   `costs` is an explicit bundle { CP, SC, listingFee, processingFixed, transactionPct, processingPct }
+   so callers (the editable price calculator, the sale modal quick-fill) can each supply their own
+   values instead of this function reaching into the product catalog or global settings itself. */
+function computeFor(costs, inputs){
+  const CP = costs.CP || 0;
+  const SC = costs.SC || 0;
+  const listingFee = costs.listingFee || 0;
+  const processingFixed = costs.processingFixed || 0;
+  const transactionPct = costs.transactionPct || 0;
+  const processingPct = costs.processingPct || 0;
   const EA = inputs.ads || 0;
   const d = (inputs.descuentoPct || 0) / 100;
   const shipCliente = inputs.freeShip ? 0 : (inputs.shipCliente || 0);
   const G = inputs.ganancia || 0;
-  const F = CP + SC + EA + fees.listingFee + fees.processingFixed;
-  const v = (fees.transactionPct + fees.processingPct) / 100;
+  const F = CP + SC + EA + listingFee + processingFixed;
+  const v = (transactionPct + processingPct) / 100;
   const denom = (1 - d) * (1 - v);
   let P = denom > 0 ? (G + F - shipCliente * (1 - v)) / denom : 0;
   if (!isFinite(P) || P < 0) P = 0;
   const descuentoAmount = P * d;
   const precioConDescuento = P - descuentoAmount;
   const totalCharged = precioConDescuento + shipCliente;
-  const transactionFeeAmt = totalCharged * fees.transactionPct / 100;
-  const processingPctAmt = totalCharged * fees.processingPct / 100;
+  const transactionFeeAmt = totalCharged * transactionPct / 100;
+  const processingPctAmt = totalCharged * processingPct / 100;
   const variableTotal = transactionFeeAmt + processingPctAmt;
   const costoTotalItem = F + variableTotal;
   const netReceived = totalCharged - variableTotal;
   const gananciaReal = netReceived - F;
   return { CP, SC, EA, F, v, P, descuentoAmount, precioConDescuento, shipCliente, totalCharged,
            transactionFeeAmt, processingPctAmt, variableTotal, costoTotalItem, netReceived, gananciaReal,
-           listingFee: fees.listingFee, processingFixed: fees.processingFixed,
-           transactionPct: fees.transactionPct, processingPct: fees.processingPct };
+           listingFee, processingFixed, transactionPct, processingPct };
 }
 
 /* ============ PRODUCTS ============ */
@@ -372,10 +383,24 @@ function renderProductSelect(selEl, includeEmpty){
   const opts = data.products.map(p=>`<option value="${p.id}">${escapeHtml(p.nombre)} — ${escapeHtml(p.colortalla)}</option>`).join('');
   selEl.innerHTML = (includeEmpty ? `<option value="">Selecciona...</option>` : '') + opts;
 }
-function onCalcProductChange(){ runPriceCalc(); }
+function onCalcProductChange(){
+  const product = getCalcProduct();
+  if (product){
+    document.getElementById('calcCP').value = product.costoProduccion;
+    document.getElementById('calcSC').value = product.shippingCosto;
+  }
+  runPriceCalc();
+}
 function getCalcProduct(){
   const sel = document.getElementById('calcProductSelect');
   return data.products.find(p=>p.id===sel.value) || null;
+}
+function initCalcFeeDefaults(){
+  const fees = data.settings.fees;
+  document.getElementById('calcListingFee').value = fees.listingFee;
+  document.getElementById('calcProcessingFixed').value = fees.processingFixed;
+  document.getElementById('calcTransactionPct').value = fees.transactionPct;
+  document.getElementById('calcProcessingPct').value = fees.processingPct;
 }
 function setFreeShip(val){
   freeShip = val;
@@ -390,8 +415,16 @@ function runPriceCalc(){
   if (!product){
     infoBox.textContent = 'Agrega un producto en la pestaña "Inputs / Catálogo" para empezar a calcular.';
   } else {
-    infoBox.innerHTML = `<b>${escapeHtml(product.proveedor||'—')}</b> · Costo producción ${fmt(product.costoProduccion)} · Shipping costo ${fmt(product.shippingCosto)}`;
+    infoBox.innerHTML = `<b>${escapeHtml(product.proveedor||'—')}</b> · Catálogo: costo producción ${fmt(product.costoProduccion)} · shipping costo ${fmt(product.shippingCosto)} (editable abajo)`;
   }
+  const costs = {
+    CP: parseFloat(document.getElementById('calcCP').value)||0,
+    SC: parseFloat(document.getElementById('calcSC').value)||0,
+    listingFee: parseFloat(document.getElementById('calcListingFee').value)||0,
+    processingFixed: parseFloat(document.getElementById('calcProcessingFixed').value)||0,
+    transactionPct: parseFloat(document.getElementById('calcTransactionPct').value)||0,
+    processingPct: parseFloat(document.getElementById('calcProcessingPct').value)||0,
+  };
   const inputs = {
     ganancia: parseFloat(document.getElementById('calcGanancia').value)||0,
     ads: parseFloat(document.getElementById('calcAds').value)||0,
@@ -399,16 +432,9 @@ function runPriceCalc(){
     shipCliente: parseFloat(document.getElementById('calcShipCliente').value)||0,
     freeShip,
   };
-  const r = computeFor(product, inputs);
+  const r = computeFor(costs, inputs);
 
-  document.getElementById('fixedFeesList').innerHTML = [
-    row('Costo Producción', fmt(r.CP)),
-    row('Shipping (Costo)', fmt(r.SC)),
-    row('Etsy Ads', fmt(r.EA)),
-    row('Listing Fee', fmt(r.listingFee)),
-    row('Processing Fee (fijo)', fmt(r.processingFixed)),
-    row('<b>Subtotal Tarifas Fijas</b>', '<b>'+fmt(r.F)+'</b>'),
-  ].join('');
+  document.getElementById('subtotalFijas').textContent = fmt(r.F);
   document.getElementById('variableFeesList').innerHTML = [
     row(`Transaction Fee (${r.transactionPct}%)`, fmt(r.transactionFeeAmt)),
     row(`Processing Fee (${r.processingPct}%)`, fmt(r.processingPctAmt)),
@@ -555,8 +581,8 @@ document.addEventListener('change', (e)=>{ if (e.target && e.target.id==='sm_pro
 function onSaleProductChange(){
   const p = data.products.find(x=>x.id===document.getElementById('sm_producto').value);
   if (p){
-    const r = computeFor(p, { ganancia:0, ads:0, descuentoPct:0, shipCliente:p.shippingCliente, freeShip:false });
-    document.getElementById('sm_costo').value = (p.costoProduccion + p.shippingCosto + r.listingFee + r.processingFixed).toFixed(2);
+    const fees = data.settings.fees;
+    document.getElementById('sm_costo').value = (p.costoProduccion + p.shippingCosto + fees.listingFee + fees.processingFixed).toFixed(2);
   }
   recalcSaleModal();
 }

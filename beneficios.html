@@ -11,11 +11,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Beneficios">
-<meta name="description" content="Calculadora de Beneficios Pecuniario — precios, costos y ganancias para tiendas Printify + Etsy.">
+<meta name="description" content="Calculadora de Beneficios Pecuniarios — precios, costos y ganancias para tiendas Printify + Etsy.">
 <link rel="manifest" href="beneficios.manifest.json?v=2026-09-26-01">
 <link rel="apple-touch-icon" href="beneficios-icon.svg?v=2026-09-26-01">
 <link rel="icon" href="beneficios-icon.svg?v=2026-09-26-01" type="image/svg+xml">
-<title>Calculadora de Beneficios Pecuniario</title>
+<title>Calculadora de Beneficios Pecuniarios</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="chart.umd.min.js?v=2026-09-26-01"></script>
 <style>
@@ -256,7 +256,7 @@ table.data-table tr:hover td{background:rgba(124,58,237,.04);}
   <div class="center-wrap">
     <div class="auth-card">
       <div class="auth-logo"><div class="brand-mark"><svg class="icon-lg" style="stroke:#fff"><use href="#ic-wallet"/></svg></div></div>
-      <div class="auth-title">Calculadora de Beneficios Pecuniario</div>
+      <div class="auth-title">Calculadora de Beneficios Pecuniarios</div>
       <div class="auth-sub">Precios y ganancias para tu tienda Printify + Etsy</div>
       <div class="auth-brandline">una app diseñada por Vincent</div>
 
@@ -293,7 +293,7 @@ table.data-table tr:hover td{background:rgba(124,58,237,.04);}
     <div class="brand">
       <div class="brand-mark"><svg class="icon" style="width:21px;height:21px;stroke:#fff"><use href="#ic-wallet"/></svg></div>
       <div class="brand-text">
-        <div class="brand-name">Beneficios Pecuniario</div>
+        <div class="brand-name">Beneficios Pecuniarios</div>
         <div class="brand-sub" id="brandStoreName">una app diseñada por Vincent</div>
       </div>
     </div>
@@ -398,8 +398,20 @@ table.data-table tr:hover td{background:rgba(124,58,237,.04);}
 
       <div class="card-panel">
         <div class="card-panel-title"><svg class="icon"><use href="#ic-wallet"/></svg><span data-i18n="precios.costos">Información de costos del producto</span></div>
-        <div class="breakdown-list" id="fixedFeesList"></div>
-        <div class="breakdown-list" id="variableFeesList" style="margin-top:8px;"></div>
+        <div class="info-box" data-i18n="precios.costoseditinfo">Todos los valores de esta sección son editables: ajústalos para este cálculo sin cambiar tu catálogo ni tus ajustes generales.</div>
+        <div class="grid-2">
+          <div class="field"><label data-i18n="th.costoprod">Costo Producción</label><input class="form-input" id="calcCP" type="number" step="0.01" value="0" oninput="runPriceCalc()"></div>
+          <div class="field"><label data-i18n="th.shipcosto">Shipping (Costo)</label><input class="form-input" id="calcSC" type="number" step="0.01" value="0" oninput="runPriceCalc()"></div>
+          <div class="field"><label data-i18n="settings.listingfee">Listing fee ($)</label><input class="form-input" id="calcListingFee" type="number" step="0.01" value="0.20" oninput="runPriceCalc()"></div>
+          <div class="field"><label data-i18n="settings.processingfixed">Processing fee fijo ($)</label><input class="form-input" id="calcProcessingFixed" type="number" step="0.01" value="0.25" oninput="runPriceCalc()"></div>
+        </div>
+        <div class="breakdown-row total" style="margin-top:2px;"><span class="lbl" data-i18n="precios.subtotalfijas">Subtotal Tarifas Fijas</span><span class="val" id="subtotalFijas">$0.00</span></div>
+
+        <div class="grid-2" style="margin-top:16px;">
+          <div class="field"><label data-i18n="settings.transactionpct">Transaction fee (%)</label><input class="form-input" id="calcTransactionPct" type="number" step="0.1" value="6.5" oninput="runPriceCalc()"></div>
+          <div class="field"><label data-i18n="settings.processingpct">Processing fee (%)</label><input class="form-input" id="calcProcessingPct" type="number" step="0.1" value="3" oninput="runPriceCalc()"></div>
+        </div>
+        <div class="breakdown-list" id="variableFeesList" style="margin-top:2px;"></div>
         <div class="breakdown-row total"><span class="lbl" data-i18n="precios.costototal">Costo Total por Item</span><span class="val" id="costoTotalItem">$0.00</span></div>
       </div>
 
