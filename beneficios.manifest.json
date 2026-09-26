@@ -1,0 +1,14 @@
+{
+  "name": "Calculadora de Beneficios Pecuniario",
+  "short_name": "Beneficios",
+  "description": "Calculadora de precios y ganancias para tiendas Printify + Etsy — una app diseñada por Vincent.",
+  "start_url": "./beneficios.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f3fb",
+  "theme_color": "#7c3aed",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "beneficios-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
