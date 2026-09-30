@@ -48,17 +48,17 @@ async function saveState(){
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
   catch(e){ console.error('save failed', e); showToast('<svg class="icon"><use href="#i-warning"/></svg> No se pudo guardar — exporta un respaldo'); }
 }
-function loadState(){
+async function loadState(){
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if(raw) state = Object.assign(defaultState(), JSON.parse(raw));
   } catch(e){ state = defaultState(); }
-  migrateState();
+  await migrateState();
 }
 /* Backfills fields/IDs added after some clients/loans already existed on a
    device, so older saved data doesn't crash newer code and picks up the
    new ID formats automatically. */
-function migrateState(){
+async function migrateState(){
   /* old single-admin `state.setup` -> `state.admins[]` (single-device only;
      real per-admin data isolation is deferred until there's a shared backend) */
   if(state.setup && !state.admins.length){
@@ -81,6 +81,7 @@ function migrateState(){
       if(!Array.isArray(c.pagos)) c.pagos = [];
       if(!Array.isArray(c.ajustes)) c.ajustes = [];
       if(typeof c.interesAbonado !== 'number') c.interesAbonado = 0;
+      if(typeof c.capitalAbonado !== 'number') c.capitalAbonado = 0;
       if(typeof c.penalidadHabilitada !== 'boolean') c.penalidadHabilitada = loan.penalidadHabilitada;
     }
   }
@@ -105,7 +106,23 @@ function migrateState(){
     const client = state.clients.find(c => c.id === loan.clientId);
     loan.folio = generateLoanFolio((client && client.estado) || 'XX', loan.fechaInicio);
   }
-  saveState();
+  /* One-time: move every existing client from whatever PIN they had to a
+     fresh 7-digit auto-generated one, and stash the plaintext list so the
+     admin can see and copy it once — after hashing there is no way to
+     recover it again except generating yet another new one. */
+  if(!state.pinMigrationV1Done){
+    const reveal = [];
+    for(const client of state.clients){
+      if(client.pinHash){
+        const pin = generateClientPin();
+        client.pinHash = await hashPin(pin);
+        reveal.push({ nombre: client.nombre, codigo: client.codigo, pin });
+      }
+    }
+    state.pendingPinReveal = reveal;
+    state.pinMigrationV1Done = true;
+  }
+  await saveState();
 }
 
 /* ============ HASH ============ */
@@ -185,7 +202,7 @@ function buildSchedule(loan){
         numero:i, fechaVencimiento: localDateStr(venc),
         capital, interes: interesPeriodo, montoBase: round2(capital + interesPeriodo),
         estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[], ajustes:[],
-        interesAbonado:0, penalidadHabilitada
+        interesAbonado:0, capitalAbonado:0, penalidadHabilitada
       });
     }
   } else if(loan.tasaTipo === 'fijo'){
@@ -200,7 +217,7 @@ function buildSchedule(loan){
         numero:i, fechaVencimiento: localDateStr(venc),
         capital, interes, montoBase: round2(capital + interes),
         estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[], ajustes:[],
-        interesAbonado:0, penalidadHabilitada
+        interesAbonado:0, capitalAbonado:0, penalidadHabilitada
       });
     }
   } else {
@@ -218,7 +235,7 @@ function buildSchedule(loan){
         numero:i, fechaVencimiento: localDateStr(venc),
         capital, interes, montoBase: round2(capital + interes),
         estatus:'pendiente', fechaPago:null, montoPagado:0, metodoPago:'', pagos:[], ajustes:[],
-        interesAbonado:0, penalidadHabilitada
+        interesAbonado:0, capitalAbonado:0, penalidadHabilitada
       });
     }
   }
@@ -262,8 +279,38 @@ function montoBaseConPenalidad(cuota){
   return (est === 'atrasado' && cuotaPenaltyOk(cuota)) ? round2(cuota.montoBase * (1+PENALTY_RATE)) : cuota.montoBase;
 }
 function montoAPagar(cuota){
-  const base = montoBaseConPenalidad(cuota) + cuotaAjustesTotal(cuota) - (cuota.interesAbonado||0);
+  const base = montoBaseConPenalidad(cuota) + cuotaAjustesTotal(cuota) - (cuota.interesAbonado||0) - (cuota.capitalAbonado||0);
   return Math.max(0, round2(base));
+}
+/* Status derived purely from the due date, ignoring the sticky 'cobrado' flag —
+   used when recomputing a cuota's state from its payment history, since we're
+   about to decide from scratch whether it should be cobrado or not. */
+function dueBasedEstatus(cuota){
+  return parseDate(cuota.fechaVencimiento) < todayMidnight() ? 'atrasado' : 'pendiente';
+}
+/* Re-derives a cuota's full-payoff ("pago completo") track from its payment
+   history: sums every 'completo' payment and decides pendiente/atrasado vs
+   cobrado from that total, rather than trusting incrementally-updated state.
+   Lets edits/deletes of any past partial payment (not just the latest) stay
+   consistent without needing to patch counters by hand. */
+function recomputeCuotaCapitalTrack(cuota){
+  const completoPagos = (cuota.pagos||[]).filter(p => p.tipo === 'completo');
+  const total = round2(completoPagos.reduce((s,p) => s + p.monto, 0));
+  const dueEst = dueBasedEstatus(cuota);
+  const baseConPenalidad = (dueEst === 'atrasado' && cuotaPenaltyOk(cuota)) ? round2(cuota.montoBase * (1+PENALTY_RATE)) : cuota.montoBase;
+  const requerido = round2(baseConPenalidad + cuotaAjustesTotal(cuota));
+  if(completoPagos.length && total >= requerido - 0.005){
+    const last = completoPagos[completoPagos.length - 1];
+    cuota.estatus = 'cobrado';
+    cuota.fechaPago = last.fecha;
+    cuota.montoPagado = total;
+    cuota.metodoPago = last.metodo;
+    cuota.capitalAbonado = 0;
+  } else {
+    cuota.estatus = 'pendiente';
+    cuota.fechaPago = null; cuota.montoPagado = 0; cuota.metodoPago = '';
+    cuota.capitalAbonado = total;
+  }
 }
 function interesRequeridoTotal(cuota){
   const est = cuotaEstatus(cuota);
@@ -291,6 +338,12 @@ function partialInterestBadge(cuota){
   if(!abonado || cuota.estatus === 'cobrado') return '';
   const falta = Math.max(0, round2(interesRequeridoTotal(cuota) - abonado));
   return `<div class="interest-pending-badge"><svg class="icon icon-sm"><use href="#i-coins"/></svg> Abonó ${fmtMoney(abonado)} de interés — faltan <strong>${fmtMoney(falta)}</strong> este período</div>`;
+}
+function partialCapitalBadge(cuota){
+  const abonado = cuota.capitalAbonado || 0;
+  if(!abonado || cuota.estatus === 'cobrado') return '';
+  const falta = montoAPagar(cuota);
+  return `<div class="interest-pending-badge"><svg class="icon icon-sm"><use href="#i-coins"/></svg> Abonado ${fmtMoney(abonado)} — faltan <strong>${fmtMoney(falta)}</strong> para cerrar esta cuota</div>`;
 }
 function renewalHint(cuota){
   const n = (cuota.pagos||[]).filter(p => p.tipo === 'interes' && p.renovacionCompleta !== false).length;
@@ -441,6 +494,19 @@ function showAdminView(){
   document.getElementById('bottomNav').style.display = 'flex';
   document.getElementById('mainFab').style.display = 'flex';
   switchAdminTab('dashboard');
+  showPinRevealIfNeeded();
+}
+function showPinRevealIfNeeded(){
+  if(!(state.pendingPinReveal && state.pendingPinReveal.length)) return;
+  document.getElementById('pinRevealList').innerHTML = state.pendingPinReveal.map(r => `
+    <div class="item-card"><div class="item-title">${escapeHtml(r.nombre)}</div><div class="item-sub">${r.codigo} · PIN nuevo: <b class="mono">${r.pin}</b></div></div>
+  `).join('');
+  document.getElementById('pinRevealOverlay').classList.add('show');
+}
+async function dismissPinReveal(){
+  state.pendingPinReveal = [];
+  await saveState();
+  document.getElementById('pinRevealOverlay').classList.remove('show');
 }
 function showClientView(){
   hideAllViews();
@@ -473,6 +539,45 @@ function handleFabClick(){
 }
 
 /* ============ CLIENTS ============ */
+const PAISES_CONOCIDOS = ['Estados Unidos', 'España', 'Cuba'];
+const ES_PROVINCIAS = ['Álava','Albacete','Alicante','Almería','Asturias','Ávila','Badajoz','Baleares','Barcelona','Burgos','Cáceres','Cádiz','Cantabria','Castellón','Ciudad Real','Córdoba','Cuenca','Gerona','Granada','Guadalajara','Guipúzcoa','Huelva','Huesca','Jaén','La Coruña','La Rioja','Las Palmas','León','Lérida','Lugo','Madrid','Málaga','Murcia','Navarra','Orense','Palencia','Pontevedra','Salamanca','Santa Cruz de Tenerife','Segovia','Sevilla','Soria','Tarragona','Teruel','Toledo','Valencia','Valladolid','Vizcaya','Zamora','Zaragoza','Ceuta','Melilla'];
+const CUBA_PROVINCIAS = ['Pinar del Río','Artemisa','La Habana','Mayabeque','Isla de la Juventud','Matanzas','Cienfuegos','Villa Clara','Sancti Spíritus','Ciego de Ávila','Camagüey','Las Tunas','Granma','Holguín','Santiago de Cuba','Guantánamo'];
+function estadosOptionsFor(pais){
+  if(pais === 'Estados Unidos') return US_STATES.map(([code,name]) => `<option value="${code}">${name}</option>`).join('');
+  if(pais === 'España') return ES_PROVINCIAS.map(p => `<option value="${p}">${p}</option>`).join('');
+  if(pais === 'Cuba') return CUBA_PROVINCIAS.map(p => `<option value="${p}">${p}</option>`).join('');
+  return '';
+}
+function onClientPaisChange(){
+  const pais = document.getElementById('c_pais').value;
+  document.getElementById('c_paisOtro').style.display = pais === '__otro__' ? '' : 'none';
+  const sel = document.getElementById('c_estado');
+  const otro = document.getElementById('c_estadoOtro');
+  if(pais === '__otro__'){
+    sel.style.display = 'none';
+    otro.style.display = '';
+  } else {
+    sel.innerHTML = estadosOptionsFor(pais);
+    sel.style.display = '';
+    otro.style.display = 'none';
+  }
+}
+function setClientEstadoValue(paisSelectValue, estado){
+  if(paisSelectValue === '__otro__'){
+    document.getElementById('c_estadoOtro').value = estado || '';
+    return;
+  }
+  const sel = document.getElementById('c_estado');
+  const hasOption = Array.from(sel.options).some(o => o.value === estado);
+  if(estado && !hasOption){
+    sel.insertAdjacentHTML('afterbegin', `<option value="${escapeHtml(estado)}">${escapeHtml(estado)} (anterior)</option>`);
+  }
+  sel.value = estado || '';
+}
+function generateClientPin(){
+  return String(Math.floor(1000000 + Math.random()*9000000));
+}
+
 let editingClientId = null;
 function openClientModal(clientId){
   editingClientId = clientId || null;
@@ -483,13 +588,17 @@ function openClientModal(clientId){
   document.getElementById('c_email').value = c ? c.email : '';
   document.getElementById('c_direccion').value = c ? c.direccion : '';
   document.getElementById('c_ciudad').value = c ? c.ciudad : '';
-  document.getElementById('c_pais').value = c ? (c.pais || 'Estados Unidos') : 'Estados Unidos';
-  document.getElementById('c_estado').value = c ? c.estado : 'NV';
+  const paisValue = c ? (c.pais || 'Estados Unidos') : 'Estados Unidos';
+  const paisSelectValue = PAISES_CONOCIDOS.includes(paisValue) ? paisValue : '__otro__';
+  document.getElementById('c_pais').value = paisSelectValue;
+  document.getElementById('c_paisOtro').value = paisSelectValue === '__otro__' ? paisValue : '';
+  onClientPaisChange();
+  setClientEstadoValue(paisSelectValue, c ? c.estado : 'NV');
   document.getElementById('c_fechaNacimiento').value = c ? (c.fechaNacimiento || (c.anioNacimiento ? c.anioNacimiento + '-01-01' : '')) : '';
   document.getElementById('c_codigo').value = c ? c.codigo : '';
   document.getElementById('c_pin').value = '';
-  document.getElementById('c_pinLabel').textContent = c ? 'Nuevo PIN (opcional)' : 'PIN de acceso del cliente (4 dígitos)';
-  document.getElementById('c_pinHint').textContent = c ? 'Deja en blanco para mantener el PIN actual.' : 'El código de cliente se genera automáticamente. Compártelo junto con este PIN para que el cliente entre a su cuenta.';
+  document.getElementById('c_pinLabel').textContent = c ? 'Nuevo PIN (opcional)' : 'PIN de acceso del cliente';
+  document.getElementById('c_pinHint').textContent = c ? 'Deja en blanco para mantener el PIN actual, o genera uno nuevo.' : 'Si lo dejas en blanco, se genera un PIN de 7 dígitos automáticamente.';
   document.getElementById('c_notas').value = c ? c.notas : '';
   document.getElementById('clientModalOverlay').classList.add('show');
 }
@@ -498,13 +607,17 @@ function closeClientModal(){ document.getElementById('clientModalOverlay').class
 function regenerateClientCodigoField(){
   document.getElementById('c_codigo').value = generateClientCodigo();
 }
+function regenerateClientPinField(){
+  document.getElementById('c_pin').value = generateClientPin();
+}
 
 async function saveClient(){
   const nombre = document.getElementById('c_nombre').value.trim();
-  const pin = document.getElementById('c_pin').value.trim();
+  const pinInput = document.getElementById('c_pin').value.trim();
   const fechaNacimiento = document.getElementById('c_fechaNacimiento').value;
-  const pais = document.getElementById('c_pais').value.trim() || 'Estados Unidos';
-  const estado = document.getElementById('c_estado').value.trim();
+  const paisSel = document.getElementById('c_pais').value;
+  const pais = paisSel === '__otro__' ? (document.getElementById('c_paisOtro').value.trim() || 'Otro') : paisSel;
+  const estado = (paisSel === '__otro__' ? document.getElementById('c_estadoOtro').value : document.getElementById('c_estado').value).trim();
   const direccion = document.getElementById('c_direccion').value.trim();
   const ciudad = document.getElementById('c_ciudad').value.trim();
   const telefono = document.getElementById('c_telefono').value.trim();
@@ -513,11 +626,10 @@ async function saveClient(){
   const codigoInput = document.getElementById('c_codigo').value.trim().toUpperCase();
   if(!nombre){ showToast('Ingresa el nombre del cliente'); return; }
   const fechaNacDate = fechaNacimiento ? parseDate(fechaNacimiento) : null;
-  if(!fechaNacDate || fechaNacDate > new Date() || fechaNacDate.getFullYear() < 1900){ showToast('Ingresa una fecha de nacimiento válida'); return; }
+  if(fechaNacimiento && (!fechaNacDate || fechaNacDate > new Date() || fechaNacDate.getFullYear() < 1900)){ showToast('Ingresa una fecha de nacimiento válida, o déjala en blanco'); return; }
 
   const editing = editingClientId ? state.clients.find(c => c.id === editingClientId) : null;
-  if(!editing && pin.length < 4){ showToast('La contraseña del cliente debe tener al menos 4 caracteres'); return; }
-  if(editing && pin && pin.length < 4){ showToast('La contraseña debe tener al menos 4 caracteres, o déjala en blanco para no cambiarla'); return; }
+  if(pinInput && pinInput.length < 4){ showToast('El PIN debe tener al menos 4 caracteres, o déjalo en blanco para generar uno automático'); return; }
 
   let codigo;
   if(codigoInput){
@@ -533,7 +645,7 @@ async function saveClient(){
       editing.historialDirecciones.push({ direccion: editing.direccion, ciudad: editing.ciudad, estado: editing.estado, pais: editing.pais, fecha: localDateStr() });
     }
     Object.assign(editing, { nombre, telefono, email, direccion, ciudad, estado, pais, fechaNacimiento, notas, codigo });
-    if(pin) editing.pinHash = await hashPin(pin);
+    if(pinInput) editing.pinHash = await hashPin(pinInput);
     await saveState();
     closeClientModal();
     renderClients();
@@ -542,9 +654,10 @@ async function saveClient(){
     return;
   }
 
+  const finalPin = pinInput || generateClientPin();
   const client = {
     id: uid(), nombre, telefono, email, direccion, ciudad, estado, pais, fechaNacimiento, notas,
-    codigo, pinHash: await hashPin(pin),
+    codigo, pinHash: await hashPin(finalPin),
     historialDirecciones: [],
     createdAt: Date.now()
   };
@@ -552,9 +665,11 @@ async function saveClient(){
   await saveState();
   closeClientModal();
   renderClients();
+  currentCodeClientId = client.id;
   document.getElementById('code_clientName').textContent = client.nombre;
   document.getElementById('code_codigo').textContent = client.codigo;
-  document.getElementById('code_pin').textContent = pin;
+  document.getElementById('code_pin').textContent = finalPin;
+  document.getElementById('codeRegenBtn').style.display = '';
   document.getElementById('codeModalOverlay').classList.add('show');
 }
 function closeCodeModal(){ document.getElementById('codeModalOverlay').classList.remove('show'); }
@@ -623,13 +738,27 @@ function renderClients(){
     list.innerHTML = keys.map(k => `<div class="group-header">${escapeHtml(k)} · ${groups.get(k).length}</div>` + groups.get(k).map(renderCard).join('')).join('');
   }
 }
+let currentCodeClientId = null;
 function viewClientCode(id){
   const c = state.clients.find(x => x.id === id);
   if(!c) return;
+  currentCodeClientId = id;
   document.getElementById('code_clientName').textContent = c.nombre;
   document.getElementById('code_codigo').textContent = c.codigo;
-  document.getElementById('code_pin').textContent = '(el PIN no se guarda en texto — usa "restablecer" si el cliente lo olvidó)';
+  document.getElementById('code_pin').textContent = '(el PIN no se guarda en texto — toca "Generar PIN nuevo" si el cliente lo olvidó)';
+  document.getElementById('codeRegenBtn').style.display = '';
   document.getElementById('codeModalOverlay').classList.add('show');
+}
+async function regenerateClientPinFromCode(){
+  if(!currentCodeClientId) return;
+  if(!confirm('¿Generar un PIN nuevo para este cliente? El PIN anterior dejará de funcionar.')) return;
+  const c = state.clients.find(x => x.id === currentCodeClientId);
+  if(!c) return;
+  const pin = generateClientPin();
+  c.pinHash = await hashPin(pin);
+  await saveState();
+  document.getElementById('code_pin').textContent = pin;
+  showToast('PIN regenerado');
 }
 function openLoanModalFor(clientId){
   openLoanModal();
@@ -696,10 +825,10 @@ function renderClientDetail(){
   for(const loan of loans){
     prestadoHist += loan.principal;
     for(const c of loan.cuotas){
-      for(const p of (c.pagos||[])){
+      (c.pagos||[]).forEach((p, pagoIndex) => {
         pagadoHist += p.monto;
-        ledger.push({ fecha:p.fecha, monto:p.monto, tipo:p.tipo, metodo:p.metodo, folio:loan.folio, numero:c.numero });
-      }
+        ledger.push({ fecha:p.fecha, monto:p.monto, tipo:p.tipo, metodo:p.metodo, folio:loan.folio, numero:c.numero, loanId:loan.id, pagoIndex, isLast: pagoIndex === c.pagos.length - 1 });
+      });
     }
   }
   document.getElementById('cd_kpiPrestado').textContent = fmtMoney(prestadoHist);
@@ -720,18 +849,6 @@ function renderClientDetail(){
     <div class="item-card"><div class="item-sub">${formatDateEs(h.fecha)}</div><div>${escapeHtml(h.direccion || '—')}, ${escapeHtml(h.ciudad || '—')}, ${escapeHtml(h.estado || '—')}${h.pais ? ', ' + escapeHtml(h.pais) : ''}</div></div>
   `).join('') : '<div class="empty-state" style="padding:20px;"><div>Sin cambios de dirección registrados.</div></div>';
 
-  document.getElementById('cd_paymentLedger').innerHTML = ledger.length ? ledger
-    .slice()
-    .sort((a,b) => parseDate(b.fecha) - parseDate(a.fecha))
-    .map(p => `<div class="item-card">
-      <div class="item-top">
-        <div><div class="item-title">${fmtMoney(p.monto)}</div><div class="item-sub">${formatDateEs(p.fecha)} · ${p.folio} · cuota #${p.numero}</div></div>
-        <span class="status-badge ${p.tipo==='interes' ? 'pendiente' : 'cobrado'}">${p.tipo==='interes' ? 'Solo interés' : 'Pago completo'}</span>
-      </div>
-      <div class="item-meta"><div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-cash"/></svg> ${escapeHtml(p.metodo || '—')}</div></div>
-    </div>`).join('')
-    : '<div class="empty-state" style="padding:20px;"><div>Aún no hay pagos registrados.</div></div>';
-
   document.getElementById('cd_loansList').innerHTML = loans.length ? loans.map(loan => {
     const totals = loanTotals(loan);
     const status = loanStatusLabel(loan);
@@ -748,10 +865,14 @@ function renderClientDetail(){
   document.getElementById('cd_paymentLedger').innerHTML = ledger.length ? ledger.map(p => `
     <div class="item-card">
       <div class="item-top">
-        <div><div class="item-title">${fmtMoney(p.monto)}</div><div class="item-sub">${p.folio} · Cuota #${p.numero} · ${p.metodo}</div></div>
+        <div><div class="item-title">${fmtMoney(p.monto)}</div><div class="item-sub">${p.folio} · Cuota #${p.numero} · ${escapeHtml(p.metodo||'—')}</div></div>
         <span class="status-badge ${p.tipo==='interes' ? 'pendiente' : 'cobrado'}">${p.tipo==='interes' ? 'solo interés' : 'completo'}</span>
       </div>
       <div class="item-meta"><div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-calendar"/></svg> ${formatDateEs(p.fecha)}</div></div>
+      <div class="item-actions">
+        <button class="mini-btn" onclick="openEditPaidModal('${p.loanId}',${p.numero},${p.pagoIndex})"><svg class="icon"><use href="#i-edit"/></svg> Editar</button>
+        ${(p.tipo==='completo' || p.isLast) ? `<button class="mini-btn danger" onclick="deleteCuotaPayment('${p.loanId}',${p.numero},${p.pagoIndex})"><svg class="icon"><use href="#i-trash"/></svg> Eliminar</button>` : ''}
+      </div>
     </div>`).join('') : '<div class="empty-state" style="padding:20px;"><div>Sin pagos registrados todavía.</div></div>';
 }
 
@@ -800,6 +921,7 @@ function openLoanModal(){
   document.getElementById('l_diasPersonalizado').value = '';
   document.getElementById('l_diaCobro').value = '';
   document.getElementById('l_fechaInicio').value = localDateStr();
+  document.getElementById('l_notas').value = '';
   setTasaTipo('simple');
   setFrecuencia('diario');
   setPenalidadHabilitada(true);
@@ -822,7 +944,8 @@ function draftLoanFromForm(){
   } else if(!(tasa>=0)) return null;
   if(currentFrecuencia==='personalizado' && !(diasPersonalizado>0)) return null;
   if(currentFrecuencia==='mensual' && !(diaCobro>=1 && diaCobro<=28)) return null;
-  return { principal, tasa: currentTasaTipo==='fijo' ? 0 : tasa, montoTotal: currentTasaTipo==='fijo' ? montoTotal : null, tasaTipo: currentTasaTipo, frecuencia: currentFrecuencia, diasPersonalizado, diaCobro, numCuotas, fechaInicio, penalidadHabilitada: currentPenalidadHabilitada };
+  const notas = document.getElementById('l_notas').value.trim();
+  return { principal, tasa: currentTasaTipo==='fijo' ? 0 : tasa, montoTotal: currentTasaTipo==='fijo' ? montoTotal : null, tasaTipo: currentTasaTipo, frecuencia: currentFrecuencia, diasPersonalizado, diaCobro, numCuotas, fechaInicio, notas, penalidadHabilitada: currentPenalidadHabilitada };
 }
 
 function updateLoanPreview(){
@@ -854,7 +977,7 @@ async function saveLoan(){
     principal: draft.principal, tasa: draft.tasa, tasaTipo: draft.tasaTipo, montoTotal: draft.montoTotal || null,
     frecuencia: draft.frecuencia, diasPersonalizado: draft.diasPersonalizado || null,
     diaCobro: draft.diaCobro || null, penalidadHabilitada: draft.penalidadHabilitada,
-    numCuotas: draft.numCuotas, fechaInicio: draft.fechaInicio,
+    numCuotas: draft.numCuotas, fechaInicio: draft.fechaInicio, notas: draft.notas || '',
     cuotas, createdAt: Date.now()
   };
   loan.folio = generateLoanFolio(client.estado, loan.fechaInicio);
@@ -927,6 +1050,9 @@ function renderLoanDetail(){
   document.getElementById('ld_clientName').textContent = client ? client.nombre : '—';
   const tasaLabel = loan.tasaTipo === 'fijo' ? `monto fijo, paga ${fmtMoney(loan.montoTotal)}` : `${loan.tasa}% ${loan.tasaTipo==='simple'?'simple':'APR'}`;
   document.getElementById('ld_sub').textContent = `${loan.folio} · ${fmtMoney(loan.principal)} · ${tasaLabel} · ${FREQ_LABEL[loan.frecuencia]}`;
+  const notasEl = document.getElementById('ld_notas');
+  notasEl.style.display = loan.notas ? '' : 'none';
+  notasEl.textContent = loan.notas ? ('Nota: ' + loan.notas) : '';
   const totals = loanTotals(loan);
   document.getElementById('ld_kpiPagado').textContent = fmtMoney(totals.pagado);
   document.getElementById('ld_kpiSaldo').textContent = fmtMoney(totals.saldo);
@@ -952,6 +1078,7 @@ function renderLoanDetail(){
       ${adjustIcon}
       <span class="status-badge ${est}">${est}</span>
       ${partialInterestBadge(c)}
+      ${partialCapitalBadge(c)}
     </div>`;
   }).join('');
 }
@@ -965,14 +1092,29 @@ function setPayType(type){
   document.getElementById('paytype_full').classList.toggle('active', type==='full');
   document.getElementById('paytype_interest').classList.toggle('active', type==='interest');
   document.getElementById('pay_interestHint').style.display = type==='interest' ? '' : 'none';
-  document.getElementById('payConfirmBtn').textContent = type==='interest' ? 'Renovar cuota' : 'Marcar cobrado';
-  if(!payCtx) return;
+  document.getElementById('pay_fullHint').style.display = type==='full' ? '' : 'none';
+  if(!payCtx){ document.getElementById('payConfirmBtn').textContent = type==='interest' ? 'Renovar cuota' : 'Marcar cobrado'; return; }
   const loan = state.loans.find(l => l.id === payCtx.loanId);
   const c = loan.cuotas.find(x => x.numero === payCtx.numero);
   const monto = type==='interest' ? interesAPagar(c) : montoAPagar(c);
   document.getElementById('pay_montoLabel').textContent = type==='interest' ? 'Monto a cobrar (interés)' : 'Monto a cobrar';
   document.getElementById('pay_monto').textContent = fmtMoney(monto);
   document.getElementById('pay_montoPagado').value = monto;
+  updatePayButtonLabel();
+}
+function updatePayButtonLabel(){
+  if(!payCtx) return;
+  const loan = state.loans.find(l => l.id === payCtx.loanId);
+  const c = loan.cuotas.find(x => x.numero === payCtx.numero);
+  const monto = round2(parseFloat(document.getElementById('pay_montoPagado').value) || 0);
+  if(currentPayType === 'interest'){
+    const requerido = interesRequeridoTotal(c);
+    const abonadoAntes = c.interesAbonado || 0;
+    document.getElementById('payConfirmBtn').textContent = (abonadoAntes + monto) >= requerido - 0.005 ? 'Renovar cuota' : 'Registrar abono';
+  } else {
+    const requerido = montoAPagar(c);
+    document.getElementById('payConfirmBtn').textContent = monto >= requerido - 0.005 ? 'Marcar cobrado' : 'Registrar abono';
+  }
 }
 
 function openPayModal(loanId, numero){
@@ -1031,26 +1173,27 @@ async function confirmPayment(){
     }
     c.pagos.push(entry);
   } else {
-    c.pagos.push({ fecha, monto, tipo:'completo', metodo });
-    c.estatus = 'cobrado';
-    c.fechaPago = fecha;
-    c.montoPagado = monto;
-    c.metodoPago = metodo;
+    const abonadoAntes = c.capitalAbonado || 0;
+    const entry = { fecha, monto, tipo:'completo', metodo, abonadoAntes };
+    c.pagos.push(entry);
+    recomputeCuotaCapitalTrack(c);
   }
   await saveState();
   closePayModal();
   renderLoanDetail();
   renderLoans();
-  showToast(currentPayType === 'interest' ? (c.interesAbonado ? 'Abono parcial registrado' : 'Cuota renovada') : 'Pago registrado');
+  if(currentClientId === loan.clientId) renderClientDetail();
+  showToast(currentPayType === 'interest'
+    ? (c.interesAbonado ? 'Abono parcial registrado' : 'Cuota renovada')
+    : (c.estatus === 'cobrado' ? 'Cuota marcada como cobrada' : 'Abono parcial registrado'));
 }
-async function undoPayment(loanId, numero){
-  if(!confirm('¿Deshacer este pago?')) return;
-  const loan = state.loans.find(l => l.id === loanId);
-  const c = loan.cuotas.find(x => x.numero === numero);
-  if(!Array.isArray(c.pagos) || !c.pagos.length) return;
+/* Shared core for reversing the most recent payment on a cuota — used by
+   both the explicit "Deshacer" action and by deleting an individual payment
+   from the client's payment history when it happens to be the last one. */
+function undoLastPaymentCore(c){
   const popped = c.pagos.pop();
   if(popped.tipo === 'completo'){
-    c.estatus = 'pendiente'; c.fechaPago = null; c.montoPagado = 0; c.metodoPago = '';
+    recomputeCuotaCapitalTrack(c);
   } else if(popped.tipo === 'interes'){
     if(popped.renovacionCompleta){
       if(popped.fechaVencimientoAnterior) c.fechaVencimiento = popped.fechaVencimientoAnterior;
@@ -1058,19 +1201,58 @@ async function undoPayment(loanId, numero){
     }
     c.interesAbonado = popped.abonadoAntes || 0;
   }
+  return popped;
+}
+async function undoPayment(loanId, numero){
+  if(!confirm('¿Deshacer este pago?')) return;
+  const loan = state.loans.find(l => l.id === loanId);
+  const c = loan.cuotas.find(x => x.numero === numero);
+  if(!Array.isArray(c.pagos) || !c.pagos.length) return;
+  undoLastPaymentCore(c);
   await saveState();
   renderLoanDetail();
   renderLoans();
+  if(currentClientId === loan.clientId) renderClientDetail();
+}
+/* Deletes one specific payment from a cuota's history — not just the last
+   one — so a mistake made many payments ago (e.g. among a hundred $1
+   abonos) can be removed directly from the client's payment ledger. Only
+   the most recent 'interes' (renewal) payment can be removed this way,
+   since older ones are chained into the renewal timeline; 'completo'
+   (full-payoff) payments can be removed from anywhere since that track is
+   just re-summed from scratch. */
+function deleteCuotaPayment(loanId, numero, pagoIndex){
+  const loan = state.loans.find(l => l.id === loanId);
+  const c = loan.cuotas.find(x => x.numero === numero);
+  const p = c.pagos[pagoIndex];
+  if(!p) return;
+  const isLast = pagoIndex === c.pagos.length - 1;
+  if(p.tipo === 'interes' && !isLast){
+    showToast('Solo se puede eliminar el pago de interés más reciente de esta cuota (usa Deshacer).');
+    return;
+  }
+  if(!confirm('¿Eliminar este pago? Esta acción no se puede deshacer.')) return;
+  if(isLast){
+    undoLastPaymentCore(c);
+  } else {
+    c.pagos.splice(pagoIndex, 1);
+    recomputeCuotaCapitalTrack(c);
+  }
+  saveState();
+  renderLoanDetail(); renderLoans();
+  if(currentClientId === loan.clientId) renderClientDetail();
+  showToast('Pago eliminado');
 }
 
-/* ============ EDIT LAST PAYMENT ============ */
+/* ============ EDIT A PAYMENT ============ */
 let editPaidCtx = null;
-function openEditPaidModal(loanId, numero){
+function openEditPaidModal(loanId, numero, pagoIndex){
   const loan = state.loans.find(l => l.id === loanId);
   const c = loan.cuotas.find(x => x.numero === numero);
   if(!c.pagos || !c.pagos.length){ showToast('Esta cuota no tiene pagos registrados todavía'); return; }
-  editPaidCtx = { loanId, numero };
-  const p = c.pagos[c.pagos.length - 1];
+  const idx = (typeof pagoIndex === 'number') ? pagoIndex : c.pagos.length - 1;
+  editPaidCtx = { loanId, numero, pagoIndex: idx };
+  const p = c.pagos[idx];
   document.getElementById('ep_numero').textContent = c.numero;
   document.getElementById('ep_tipo').textContent = p.tipo === 'interes' ? 'Solo interés (renovación)' : 'Pago completo';
   document.getElementById('ep_fecha').value = p.fecha;
@@ -1083,27 +1265,28 @@ async function confirmEditPaidPayment(){
   if(!editPaidCtx) return;
   const loan = state.loans.find(l => l.id === editPaidCtx.loanId);
   const c = loan.cuotas.find(x => x.numero === editPaidCtx.numero);
-  const p = c.pagos[c.pagos.length - 1];
+  const p = c.pagos[editPaidCtx.pagoIndex];
+  const isLast = editPaidCtx.pagoIndex === c.pagos.length - 1;
   p.fecha = document.getElementById('ep_fecha').value;
   p.monto = round2(parseFloat(document.getElementById('ep_monto').value) || 0);
   p.metodo = document.getElementById('ep_metodo').value;
-  if(c.estatus === 'cobrado' && p.tipo === 'completo'){
-    c.fechaPago = p.fecha; c.montoPagado = p.monto; c.metodoPago = p.metodo;
-  }
-  if(p.tipo === 'interes' && p.renovacionCompleta === false){
+  if(p.tipo === 'completo'){
+    recomputeCuotaCapitalTrack(c);
+  } else if(p.tipo === 'interes' && isLast && p.renovacionCompleta === false){
     c.interesAbonado = round2((p.abonadoAntes||0) + p.monto);
   }
   await saveState();
   closeEditPaidModal();
   renderLoanDetail();
   renderLoans();
+  if(currentClientId === loan.clientId) renderClientDetail();
   showToast('Pago actualizado');
 }
 async function undoPaymentFromEdit(){
   if(!editPaidCtx) return;
-  const { loanId, numero } = editPaidCtx;
+  const { loanId, numero, pagoIndex } = editPaidCtx;
   closeEditPaidModal();
-  await undoPayment(loanId, numero);
+  deleteCuotaPayment(loanId, numero, pagoIndex);
 }
 
 /* ============ MANUAL ADJUSTMENTS (fee waivers, promos, interest-free periods, etc.) ============ */
@@ -1575,7 +1758,6 @@ function populateStateSelects(){
   ['su_estado','s_estado'].forEach(id => { document.getElementById(id).innerHTML = opts; });
   document.getElementById('su_estado').value = 'NV';
   document.getElementById('s_estado').value = 'NV';
-  document.getElementById('estadosDatalist').innerHTML = opts;
 }
 
 /* ============ UPDATE BANNER ============ */
@@ -1595,10 +1777,10 @@ function forceFreshReload(){
 }
 
 /* ============ INIT ============ */
-function init(){
+async function init(){
   const m = document.querySelector('meta[name="build-version"]');
   myVersion = m ? m.content : null;
-  loadState();
+  await loadState();
   populateStateSelects();
 
   try {
