@@ -7,15 +7,15 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="theme-color" content="#060907">
-<meta name="build-version" content="2026-09-26-01">
+<meta name="build-version" content="2026-09-30-01">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Vincent Bank">
-<link rel="apple-touch-icon" href="logo.png?v=2026-09-26-01">
-<link rel="icon" href="logo.png?v=2026-09-26-01">
+<link rel="apple-touch-icon" href="logo.png?v=2026-09-30-01">
+<link rel="icon" href="logo.png?v=2026-09-30-01">
 <title>Vincent Bank — Préstamos</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="jspdf.umd.min.js?v=2026-09-26-01"></script>
+<script src="jspdf.umd.min.js?v=2026-09-30-01"></script>
 <style>
 :root{
   --bg:#0a0805;
@@ -273,7 +273,7 @@ a{color:var(--accent2);}
   <div class="center-wrap">
     <div class="auth-card">
       <div id="su_backWrap" style="margin-bottom:10px;display:none;"><button class="mini-btn" style="flex:none;padding:6px 12px;" onclick="showLoginView()"><svg class="icon"><use href="#i-arrow-left"/></svg> Volver</button></div>
-      <div class="auth-logo"><img src="logo.png?v=2026-09-26-01" alt="Vincent Bank"></div>
+      <div class="auth-logo"><img src="logo.png?v=2026-09-30-01" alt="Vincent Bank"></div>
       <div class="auth-title">Crear cuenta de administrador</div>
       <div class="auth-sub">Usuario, datos del prestamista y contraseña</div>
       <div class="form-group">
@@ -319,7 +319,7 @@ a{color:var(--accent2);}
 <div class="view" id="view-login">
   <div class="center-wrap">
     <div class="auth-card">
-      <div class="auth-logo"><img src="logo.png?v=2026-09-26-01" alt="Vincent Bank"></div>
+      <div class="auth-logo"><img src="logo.png?v=2026-09-30-01" alt="Vincent Bank"></div>
       <div class="auth-title">Vincent Bank</div>
       <div class="auth-sub">Selecciona cómo quieres entrar</div>
       <div class="tabs-row">
@@ -360,7 +360,7 @@ a{color:var(--accent2);}
 <!-- ============ ADMIN APP ============ -->
 <div class="view" id="view-admin">
   <header class="topbar">
-    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-09-26-01" alt="Vincent Bank"></span><span class="brand-name">Vincent Bank</span></div>
+    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-09-30-01" alt="Vincent Bank"></span><span class="brand-name">Vincent Bank</span></div>
     <div class="topbar-actions">
       <button class="icon-btn" onclick="openSettings()"><svg class="icon"><use href="#i-settings"/></svg></button>
     </div>
@@ -428,6 +428,7 @@ a{color:var(--accent2);}
     <div class="detail-header">
       <div class="detail-name" id="ld_clientName">—</div>
       <div class="detail-sub" id="ld_sub">—</div>
+      <div class="form-hint" id="ld_notas" style="display:none;margin-top:4px;"></div>
     </div>
     <div class="kpi-strip">
       <div class="kpi-mini"><div class="v mono" id="ld_kpiPagado">$0</div><div class="l">Pagado</div></div>
@@ -494,7 +495,7 @@ a{color:var(--accent2);}
 <!-- ============ CLIENT APP ============ -->
 <div class="view" id="view-client">
   <header class="topbar">
-    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-09-26-01" alt="Vincent Bank"></span><span class="brand-name" id="clientBrandName">Vincent Bank</span></div>
+    <div class="brand"><span class="brand-mark"><img src="logo.png?v=2026-09-30-01" alt="Vincent Bank"></span><span class="brand-name" id="clientBrandName">Vincent Bank</span></div>
     <div class="topbar-actions"><button class="icon-btn" onclick="logout()"><svg class="icon"><use href="#i-door"/></svg></button></div>
   </header>
   <div style="padding:6px 18px;">
@@ -539,16 +540,13 @@ a{color:var(--accent2);}
       </div>
       <div class="form-group">
         <label class="form-label">País</label>
-        <input class="form-input" id="c_pais" list="paisesDatalist" placeholder="Estados Unidos">
-        <datalist id="paisesDatalist">
-          <option value="Estados Unidos">
-          <option value="República Dominicana">
-          <option value="México">
-          <option value="Colombia">
-          <option value="Venezuela">
-          <option value="Panamá">
-          <option value="Puerto Rico">
-        </datalist>
+        <select class="form-select" id="c_pais" onchange="onClientPaisChange()">
+          <option value="Estados Unidos">Estados Unidos</option>
+          <option value="España">España</option>
+          <option value="Cuba">Cuba</option>
+          <option value="__otro__">Otro</option>
+        </select>
+        <input class="form-input" id="c_paisOtro" placeholder="Escribe el país" style="display:none;margin-top:8px;">
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -557,18 +555,21 @@ a{color:var(--accent2);}
         </div>
         <div class="form-group">
           <label class="form-label">Estado / provincia</label>
-          <input class="form-input" id="c_estado" list="estadosDatalist" placeholder="NV">
-          <datalist id="estadosDatalist"></datalist>
+          <select class="form-select" id="c_estado"></select>
+          <input class="form-input" id="c_estadoOtro" placeholder="Estado / provincia" style="display:none;">
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Fecha de nacimiento</label>
+        <label class="form-label">Fecha de nacimiento (opcional)</label>
         <input class="form-input" id="c_fechaNacimiento" type="date" min="1900-01-01" max="2026-12-31">
       </div>
       <div class="form-group">
-        <label class="form-label" id="c_pinLabel">Contraseña de acceso del cliente</label>
-        <input class="form-input" id="c_pin" type="password" placeholder="Mínimo 4 caracteres">
-        <div class="form-hint" id="c_pinHint">El ID de cliente se genera automáticamente. Compártelo junto con esta contraseña para que el cliente entre a su cuenta.</div>
+        <label class="form-label" id="c_pinLabel">PIN de acceso del cliente</label>
+        <div style="display:flex;gap:8px;">
+          <input class="form-input" id="c_pin" style="flex:1;" placeholder="Se genera automático (7 dígitos) si lo dejas en blanco">
+          <button class="mini-btn" style="flex:none;padding:0 14px;" type="button" onclick="regenerateClientPinField()"><svg class="icon"><use href="#i-renew"/></svg> Generar</button>
+        </div>
+        <div class="form-hint" id="c_pinHint">Si lo dejas en blanco, se genera un PIN de 7 dígitos automáticamente.</div>
       </div>
       <div class="form-group">
         <label class="form-label">ID de cliente (login)</label>
@@ -607,9 +608,26 @@ a{color:var(--accent2);}
           <div class="code-pin" id="code_pin">----</div>
         </div>
       </div>
+      <button class="btn btn-secondary btn-full" id="codeRegenBtn" style="margin-top:14px;display:none;" onclick="regenerateClientPinFromCode()"><svg class="icon"><use href="#i-renew"/></svg> Generar PIN nuevo</button>
     </div>
     <div class="modal-footer">
       <button class="btn btn-primary btn-full" onclick="closeCodeModal()">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: PINs nuevos (migración de seguridad) ============ -->
+<div class="modal-overlay" id="pinRevealOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Nuevos PINs generados</div>
+    </div>
+    <div class="modal-body">
+      <div class="disclaimer-box">Por seguridad, le asignamos a tus clientes existentes un <b>PIN nuevo de 7 dígitos</b> generado al azar (antes podías escribirlo tú mismo). Copia esta lista ahora — una vez que cierres esta ventana no se puede volver a mostrar en texto; tendrías que generar otro PIN nuevo desde "Ver acceso" o "Editar cliente".</div>
+      <div class="list-wrap" id="pinRevealList" style="padding:0;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary btn-full" onclick="dismissPinReveal()">Ya los copié, entendido</button>
     </div>
   </div>
 </div>
@@ -698,6 +716,11 @@ a{color:var(--accent2);}
         </button>
       </div>
 
+      <div class="form-group" style="margin-top:14px;">
+        <label class="form-label">Notas (opcional)</label>
+        <textarea class="form-textarea" id="l_notas" placeholder="¿Para qué fue este préstamo? Ej. reparación de carro"></textarea>
+      </div>
+
       <div class="preview-box" id="loanPreviewBox" style="display:none;">
         <div class="preview-row"><span>Interés total</span><b id="pv_interesTotal">$0</b></div>
         <div class="preview-row"><span>Monto por cuota (regular)</span><b id="pv_cuota">$0</b></div>
@@ -722,8 +745,8 @@ a{color:var(--accent2);}
     <div class="modal-body">
       <div class="type-grid" style="margin-bottom:14px;">
         <button class="type-opt active" id="paytype_full" onclick="setPayType('full')">
-          <div class="t-name">Pago completo</div>
-          <div class="t-desc">Cierra la cuota</div>
+          <div class="t-name">Pago / abono</div>
+          <div class="t-desc">Cierra la cuota, o abona una parte si no alcanza</div>
         </button>
         <button class="type-opt" id="paytype_interest" onclick="setPayType('interest')">
           <div class="t-name">Solo interés</div>
@@ -736,6 +759,7 @@ a{color:var(--accent2);}
         <div class="preview-row total"><span id="pay_montoLabel">Monto a cobrar</span><b id="pay_monto">$0</b></div>
       </div>
       <div class="form-hint" id="pay_interestHint" style="display:none;margin-top:8px;">Al confirmar, la cuota se renueva por otro periodo: sigue debiendo el mismo capital + interés en la próxima fecha, y esta renovación queda registrada en su historial.</div>
+      <div class="form-hint" id="pay_fullHint" style="margin-top:8px;">Si el monto no cubre lo que falta, se registra como abono parcial y la cuota sigue abierta para seguir cobrando — puedes registrar tantos pagos como haga falta hasta completarla.</div>
       <div class="form-group" style="margin-top:14px;">
         <label class="form-label">Fecha de vencimiento</label>
         <div style="display:flex;gap:8px;">
@@ -751,7 +775,7 @@ a{color:var(--accent2);}
         </div>
         <div class="form-group">
           <label class="form-label">Monto pagado ($)</label>
-          <input class="form-input" id="pay_montoPagado" type="number" step="0.01">
+          <input class="form-input" id="pay_montoPagado" type="number" step="0.01" oninput="updatePayButtonLabel()">
         </div>
       </div>
       <div class="form-group">
@@ -928,6 +952,6 @@ a{color:var(--accent2);}
 
 <div class="toast" id="toast"></div>
 
-<script src="prestamos.js?v=2026-09-26-01"></script>
+<script src="prestamos.js?v=2026-09-30-01"></script>
 </body>
 </html>
