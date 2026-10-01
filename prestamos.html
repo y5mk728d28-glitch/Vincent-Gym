@@ -204,6 +204,8 @@ a{color:var(--accent2);}
 .detail-btn.primary{background:linear-gradient(145deg,var(--accent),var(--accent-dim));color:var(--on-accent);border:none;}
 .detail-btn.danger{color:var(--danger);}
 .kpi-strip{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px 18px;}
+.pie-legend-item{display:flex;align-items:center;gap:8px;}
+.pie-swatch{width:12px;height:12px;border-radius:3px;flex-shrink:0;}
 .kpi-mini{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 6px;text-align:center;}
 .kpi-mini .v{font-family:'DM Mono',monospace;font-size:15px;font-weight:700;}
 .kpi-mini .l{font-size:9.5px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.04em;}
@@ -398,6 +400,43 @@ a{color:var(--accent2);}
     </section>
     <div class="section-title">Próximos vencimientos y atrasos</div>
     <div class="list-wrap" id="dashUpcomingList"></div>
+
+    <div class="section-title">Capital e inversión</div>
+    <div class="list-wrap" style="gap:14px;">
+      <div class="item-card">
+        <div class="form-label" style="margin-bottom:10px;">Datos manuales</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Capital invertido ($)</label>
+            <input class="form-input" id="cap_invertido" type="number" step="0.01" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Ganancias retiradas ($)</label>
+            <input class="form-input" id="cap_retiradas" type="number" step="0.01" min="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ganancias reinvertidas ($)</label>
+          <input class="form-input" id="cap_reinvertidas" type="number" step="0.01" min="0">
+        </div>
+        <button class="btn btn-secondary btn-full" onclick="saveCapitalInfo()">Guardar</button>
+        <div class="form-hint" style="margin-top:8px;">Estos tres valores los llevas tú — edítalos cuando quieras. Son la base del cálculo de abajo.</div>
+      </div>
+
+      <div class="item-card">
+        <div class="form-label" style="margin-bottom:10px;">Automático (calculado de tus préstamos)</div>
+        <div class="kpi-strip" style="margin-bottom:16px;">
+          <div class="kpi-mini"><div class="v mono" id="cap_prestadoActivo">$0</div><div class="l">Prestado activo</div></div>
+          <div class="kpi-mini"><div class="v mono" id="cap_disponible">$0</div><div class="l">Disponible</div></div>
+          <div class="kpi-mini"><div class="v mono" id="cap_gananciaHist">$0</div><div class="l">Ganancia cobrada</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;justify-content:center;">
+          <div id="capPieChart" style="width:140px;height:140px;border-radius:50%;flex-shrink:0;"></div>
+          <div id="capPieLegend" style="display:flex;flex-direction:column;gap:8px;font-size:12.5px;color:var(--muted);"></div>
+        </div>
+        <div class="form-hint" style="margin-top:14px;text-align:center;">El círculo reparte tu capital invertido + ganancias reinvertidas entre lo que está prestado ahora mismo y lo que tienes disponible, más lo que ya retiraste como ganancia.</div>
+      </div>
+    </div>
   </div>
 
   <!-- Clientes tab -->
@@ -418,6 +457,11 @@ a{color:var(--accent2);}
       <button class="chip active" data-f="all" onclick="setLoanFilter('all')" style="background:var(--card);border:1px solid var(--border);border-radius:20px;padding:7px 14px;font-size:12.5px;color:var(--muted);font-weight:500;">Todos</button>
       <button class="chip" data-f="atrasado" onclick="setLoanFilter('atrasado')" style="background:var(--card);border:1px solid var(--border);border-radius:20px;padding:7px 14px;font-size:12.5px;color:var(--muted);font-weight:500;">Atrasados</button>
       <button class="chip" data-f="activo" onclick="setLoanFilter('activo')" style="background:var(--card);border:1px solid var(--border);border-radius:20px;padding:7px 14px;font-size:12.5px;color:var(--muted);font-weight:500;">Activos</button>
+    </div>
+    <div id="loanSortRow" style="display:flex;gap:8px;padding:0 18px 10px;">
+      <button class="chip active" data-sort="fecha" onclick="setLoanSort('fecha')">Fecha</button>
+      <button class="chip" data-sort="nombre" onclick="setLoanSort('nombre')">Nombre</button>
+      <button class="chip" data-sort="pais" onclick="setLoanSort('pais')">Por país</button>
     </div>
     <div class="list-wrap" id="loansList"></div>
   </div>

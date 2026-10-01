@@ -39,7 +39,8 @@ function defaultState(){
     clients: [],
     loans: [],
     clientSeq: 0,
-    loanSeq: 0
+    loanSeq: 0,
+    capitalInfo: { invertido: 0, retiradas: 0, reinvertidas: 0 }
   };
 }
 let state = defaultState();
@@ -88,6 +89,9 @@ async function migrateState(){
   for(const client of state.clients){
     if(!Array.isArray(client.historialDirecciones)) client.historialDirecciones = [];
     if(!client.pais) client.pais = 'Estados Unidos';
+  }
+  if(!state.capitalInfo || typeof state.capitalInfo !== 'object'){
+    state.capitalInfo = { invertido: 0, retiradas: 0, reinvertidas: 0 };
   }
   /* Any client/loan ID not in the current format (including the two earlier
      formats this app has used) gets renumbered in creation order, so every
@@ -550,6 +554,8 @@ function handleFabClick(){
 
 /* ============ CLIENTS ============ */
 const PAISES_CONOCIDOS = ['Estados Unidos', 'España', 'Cuba'];
+const COUNTRY_FLAGS = { 'Estados Unidos': '🇺🇸', 'España': '🇪🇸', 'Cuba': '🇨🇺' };
+function countryFlag(pais){ return COUNTRY_FLAGS[pais] || '🌐'; }
 const ES_PROVINCIAS = ['Álava','Albacete','Alicante','Almería','Asturias','Ávila','Badajoz','Baleares','Barcelona','Burgos','Cáceres','Cádiz','Cantabria','Castellón','Ciudad Real','Córdoba','Cuenca','Gerona','Granada','Guadalajara','Guipúzcoa','Huelva','Huesca','Jaén','La Coruña','La Rioja','Las Palmas','León','Lérida','Lugo','Madrid','Málaga','Murcia','Navarra','Orense','Palencia','Pontevedra','Salamanca','Santa Cruz de Tenerife','Segovia','Sevilla','Soria','Tarragona','Teruel','Toledo','Valencia','Valladolid','Vizcaya','Zamora','Zaragoza','Ceuta','Melilla'];
 const CUBA_PROVINCIAS = ['Pinar del Río','Artemisa','La Habana','Mayabeque','Isla de la Juventud','Matanzas','Cienfuegos','Villa Clara','Sancti Spíritus','Ciego de Ávila','Camagüey','Las Tunas','Granma','Holguín','Santiago de Cuba','Guantánamo'];
 function estadosOptionsFor(pais){
@@ -724,7 +730,7 @@ function renderClients(){
       </div>
       <div class="item-meta">
         ${c.telefono ? `<div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-phone"/></svg> ${escapeHtml(c.telefono)}</div>` : ''}
-        ${c.estado ? `<div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-pin"/></svg> ${escapeHtml(c.ciudad||'')} ${escapeHtml(c.estado)}${c.pais ? ' · ' + escapeHtml(c.pais) : ''}</div>` : ''}
+        ${c.estado ? `<div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-pin"/></svg> ${escapeHtml(c.ciudad||'')} ${escapeHtml(c.estado)}${c.pais ? ' · ' + countryFlag(c.pais) + ' ' + escapeHtml(c.pais) : ''}</div>` : ''}
       </div>
       <div class="item-actions" onclick="event.stopPropagation()">
         <button class="mini-btn primary" onclick="openClientDetail('${c.id}')"><svg class="icon"><use href="#i-user"/></svg> Ver detalle</button>
@@ -745,7 +751,8 @@ function renderClients(){
       groups.get(k).push(c);
     }
     const keys = Array.from(groups.keys()).sort((a,b) => a.localeCompare(b, 'es'));
-    list.innerHTML = keys.map(k => `<div class="group-header">${escapeHtml(k)} · ${groups.get(k).length}</div>` + groups.get(k).map(renderCard).join('')).join('');
+    const flagPrefix = currentClientSort === 'pais' ? (k => countryFlag(k) + ' ') : (() => '');
+    list.innerHTML = keys.map(k => `<div class="group-header">${flagPrefix(k)}${escapeHtml(k)} · ${groups.get(k).length}</div>` + groups.get(k).map(renderCard).join('')).join('');
   }
 }
 let currentCodeClientId = null;
@@ -849,7 +856,7 @@ function renderClientDetail(){
     <div class="item-meta" style="flex-direction:column;gap:8px;align-items:flex-start;">
       <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-phone"/></svg> ${escapeHtml(client.telefono || '—')}</div>
       <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-mail"/></svg> ${escapeHtml(client.email || '—')}</div>
-      <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-pin"/></svg> ${escapeHtml(client.direccion || '—')}, ${escapeHtml(client.ciudad || '—')}, ${escapeHtml(client.estado || '—')}${client.pais ? ', ' + escapeHtml(client.pais) : ''}</div>
+      <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-pin"/></svg> ${escapeHtml(client.direccion || '—')}, ${escapeHtml(client.ciudad || '—')}, ${escapeHtml(client.estado || '—')}${client.pais ? ', ' + countryFlag(client.pais) + ' ' + escapeHtml(client.pais) : ''}</div>
       <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-cake"/></svg> ${client.fechaNacimiento ? formatDateEs(client.fechaNacimiento) : (client.anioNacimiento || '—')}</div>
       ${client.notas ? `<div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-doc"/></svg> ${escapeHtml(client.notas)}</div>` : ''}
     </div>`;
@@ -1014,6 +1021,13 @@ function loanStatusLabel(loan){
   return 'cobrado';
 }
 
+let currentLoanSort = 'fecha';
+function setLoanSort(mode){
+  currentLoanSort = mode;
+  document.querySelectorAll('#loanSortRow .chip').forEach(b => b.classList.toggle('active', b.dataset.sort === mode));
+  renderLoans();
+}
+
 function renderLoans(){
   const q = (document.getElementById('loanSearch').value || '').toLowerCase();
   const list = document.getElementById('loansList');
@@ -1032,7 +1046,7 @@ function renderLoans(){
     return;
   }
   document.getElementById('emptyStateGlobal').style.display = 'none';
-  list.innerHTML = items.map(({loan,client}) => {
+  const renderCard = ({loan,client}) => {
     const totals = loanTotals(loan);
     const status = loanStatusLabel(loan);
     return `<div class="item-card" onclick="openLoanDetail('${loan.id}')">
@@ -1043,9 +1057,27 @@ function renderLoans(){
       <div class="item-meta">
         <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-cash"/></svg> Saldo: ${fmtMoney(totals.saldo)}</div>
         ${totals.atrasadas ? `<div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-clock"/></svg> ${totals.atrasadas} cuota(s) atrasada(s)</div>` : ''}
+        ${client && client.pais ? `<div class="item-meta-item">${countryFlag(client.pais)} ${escapeHtml(client.pais)}</div>` : ''}
       </div>
     </div>`;
-  }).join('');
+  };
+  if(currentLoanSort === 'nombre'){
+    items.sort((a,b) => (a.client ? a.client.nombre : '').localeCompare(b.client ? b.client.nombre : '', 'es'));
+    list.innerHTML = items.map(renderCard).join('');
+  } else if(currentLoanSort === 'pais'){
+    const keyFn = ({client}) => (client && client.pais) || 'Sin país';
+    const groups = new Map();
+    for(const item of items){
+      const k = keyFn(item);
+      if(!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(item);
+    }
+    const keys = Array.from(groups.keys()).sort((a,b) => a.localeCompare(b, 'es'));
+    list.innerHTML = keys.map(k => `<div class="group-header">${countryFlag(k)} ${escapeHtml(k)} · ${groups.get(k).length}</div>` + groups.get(k).map(renderCard).join('')).join('');
+  } else {
+    items.sort((a,b) => (b.loan.fechaInicio||'').localeCompare(a.loan.fechaInicio||''));
+    list.innerHTML = items.map(renderCard).join('');
+  }
 }
 
 function openLoanDetail(id){
@@ -1413,19 +1445,79 @@ function renderDashboard(){
   const wrap = document.getElementById('dashUpcomingList');
   if(!upcoming.length){
     wrap.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg class="icon icon-lg"><use href="#i-check"/></svg></div><div>No hay cuotas próximas ni atrasadas.</div></div>';
+  } else {
+    wrap.innerHTML = upcoming.slice(0,12).map(({loan,client,c,est}) => `
+      <div class="item-card" onclick="openLoanDetail('${loan.id}')">
+        <div class="item-top">
+          <div><div class="item-title">${escapeHtml(client ? client.nombre : '—')}</div><div class="item-sub">${loan.folio} · Cuota #${c.numero}</div></div>
+          <span class="status-badge ${est}">${est}</span>
+        </div>
+        <div class="item-meta">
+          <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-calendar"/></svg> ${formatDateEs(c.fechaVencimiento)}</div>
+          <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-cash"/></svg> ${fmtMoney(montoAPagar(c))}</div>
+        </div>
+      </div>`).join('');
+  }
+  renderCapitalSection();
+}
+
+/* ============ CAPITAL / INVESTMENT OVERVIEW ============ */
+async function saveCapitalInfo(){
+  state.capitalInfo = {
+    invertido: round2(parseFloat(document.getElementById('cap_invertido').value) || 0),
+    retiradas: round2(parseFloat(document.getElementById('cap_retiradas').value) || 0),
+    reinvertidas: round2(parseFloat(document.getElementById('cap_reinvertidas').value) || 0)
+  };
+  await saveState();
+  renderCapitalSection();
+  showToast('Capital actualizado');
+}
+function renderCapitalSection(){
+  const cap = state.capitalInfo || { invertido:0, retiradas:0, reinvertidas:0 };
+  document.getElementById('cap_invertido').value = cap.invertido || '';
+  document.getElementById('cap_retiradas').value = cap.retiradas || '';
+  document.getElementById('cap_reinvertidas').value = cap.reinvertidas || '';
+
+  let prestadoHistorico = 0, cobradoHistorico = 0, prestadoActivo = 0;
+  for(const loan of state.loans){
+    prestadoHistorico += loan.principal;
+    if(loanIsActive(loan)) prestadoActivo += loan.principal;
+    for(const c of loan.cuotas) cobradoHistorico += cuotaPagosTotal(c);
+  }
+  prestadoActivo = round2(prestadoActivo);
+  const gananciaHistorica = Math.max(0, round2(cobradoHistorico - prestadoHistorico + prestadoActivo));
+
+  const poolTrabajo = round2((cap.invertido||0) + (cap.reinvertidas||0));
+  const disponible = Math.max(0, round2(poolTrabajo - prestadoActivo));
+  const retirado = round2(cap.retiradas||0);
+
+  document.getElementById('cap_prestadoActivo').textContent = fmtMoney(prestadoActivo);
+  document.getElementById('cap_disponible').textContent = fmtMoney(disponible);
+  document.getElementById('cap_gananciaHist').textContent = fmtMoney(gananciaHistorica);
+
+  const total = round2(prestadoActivo + disponible + retirado);
+  const pie = document.getElementById('capPieChart');
+  const legend = document.getElementById('capPieLegend');
+  const slices = [
+    { label: 'Prestado activo', value: prestadoActivo, color: 'var(--accent)' },
+    { label: 'Disponible', value: disponible, color: 'var(--good)' },
+    { label: 'Retirado', value: retirado, color: 'var(--danger)' }
+  ];
+  if(total <= 0){
+    pie.style.background = 'var(--card)';
+    legend.innerHTML = '<div style="text-align:center;">Ingresa tu capital invertido arriba para ver el gráfico.</div>';
     return;
   }
-  wrap.innerHTML = upcoming.slice(0,12).map(({loan,client,c,est}) => `
-    <div class="item-card" onclick="openLoanDetail('${loan.id}')">
-      <div class="item-top">
-        <div><div class="item-title">${escapeHtml(client ? client.nombre : '—')}</div><div class="item-sub">${loan.folio} · Cuota #${c.numero}</div></div>
-        <span class="status-badge ${est}">${est}</span>
-      </div>
-      <div class="item-meta">
-        <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-calendar"/></svg> ${formatDateEs(c.fechaVencimiento)}</div>
-        <div class="item-meta-item"><svg class="icon icon-sm"><use href="#i-cash"/></svg> ${fmtMoney(montoAPagar(c))}</div>
-      </div>
-    </div>`).join('');
+  let acc = 0;
+  const stops = slices.map(s => {
+    const from = acc;
+    acc += (s.value/total)*100;
+    return `${s.color} ${from}% ${acc}%`;
+  }).join(', ');
+  pie.style.background = `conic-gradient(${stops})`;
+  legend.innerHTML = slices.map(s => `
+    <div class="pie-legend-item"><span class="pie-swatch" style="background:${s.color};"></span> ${s.label}: <b style="color:var(--text);">${fmtMoney(s.value)}</b> (${total ? (s.value/total*100).toFixed(1) : '0'}%)</div>
+  `).join('');
 }
 
 /* ============ CLIENT VIEW ============ */
