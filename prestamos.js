@@ -169,8 +169,18 @@ function periodsPerYearOf(loan){
 }
 /* Due date for period i (1-based). 'mensual' anchors to a fixed calendar
    day (loan.diaCobro) each month so the date never drifts across months
-   with different lengths — everything else is a fixed day-count interval. */
+   with different lengths — everything else is a fixed day-count interval.
+   If the admin picked an exact first-due-date (loan.primerVencimiento,
+   e.g. "the 5th" or "the 10th" regardless of frequency), that date is used
+   directly for cuota 1, and later cuotas keep the usual cadence from there. */
 function cuotaVencimiento(loan, start, i){
+  if(loan.primerVencimiento){
+    const base = parseDate(loan.primerVencimiento);
+    if(i === 1) return base;
+    return loan.frecuencia === 'mensual'
+      ? addMonthsFixedDay(base, i-1, base.getDate())
+      : addDays(base, periodDays(loan) * (i-1));
+  }
   if(loan.frecuencia === 'mensual'){
     return addMonthsFixedDay(start, i, Number(loan.diaCobro) || start.getDate());
   }
@@ -921,6 +931,7 @@ function openLoanModal(){
   document.getElementById('l_diasPersonalizado').value = '';
   document.getElementById('l_diaCobro').value = '';
   document.getElementById('l_fechaInicio').value = localDateStr();
+  document.getElementById('l_primerVencimiento').value = '';
   document.getElementById('l_notas').value = '';
   setTasaTipo('simple');
   setFrecuencia('diario');
@@ -938,6 +949,7 @@ function draftLoanFromForm(){
   const diasPersonalizado = parseInt(document.getElementById('l_diasPersonalizado').value, 10);
   const diaCobro = parseInt(document.getElementById('l_diaCobro').value, 10);
   const fechaInicio = document.getElementById('l_fechaInicio').value;
+  const primerVencimiento = document.getElementById('l_primerVencimiento').value || null;
   if(!(principal>0) || !(numCuotas>0) || !fechaInicio) return null;
   if(currentTasaTipo === 'fijo'){
     if(!(montoTotal > principal)) return null;
@@ -945,7 +957,7 @@ function draftLoanFromForm(){
   if(currentFrecuencia==='personalizado' && !(diasPersonalizado>0)) return null;
   if(currentFrecuencia==='mensual' && !(diaCobro>=1 && diaCobro<=28)) return null;
   const notas = document.getElementById('l_notas').value.trim();
-  return { principal, tasa: currentTasaTipo==='fijo' ? 0 : tasa, montoTotal: currentTasaTipo==='fijo' ? montoTotal : null, tasaTipo: currentTasaTipo, frecuencia: currentFrecuencia, diasPersonalizado, diaCobro, numCuotas, fechaInicio, notas, penalidadHabilitada: currentPenalidadHabilitada };
+  return { principal, tasa: currentTasaTipo==='fijo' ? 0 : tasa, montoTotal: currentTasaTipo==='fijo' ? montoTotal : null, tasaTipo: currentTasaTipo, frecuencia: currentFrecuencia, diasPersonalizado, diaCobro, numCuotas, fechaInicio, primerVencimiento, notas, penalidadHabilitada: currentPenalidadHabilitada };
 }
 
 function updateLoanPreview(){
@@ -977,7 +989,7 @@ async function saveLoan(){
     principal: draft.principal, tasa: draft.tasa, tasaTipo: draft.tasaTipo, montoTotal: draft.montoTotal || null,
     frecuencia: draft.frecuencia, diasPersonalizado: draft.diasPersonalizado || null,
     diaCobro: draft.diaCobro || null, penalidadHabilitada: draft.penalidadHabilitada,
-    numCuotas: draft.numCuotas, fechaInicio: draft.fechaInicio, notas: draft.notas || '',
+    numCuotas: draft.numCuotas, fechaInicio: draft.fechaInicio, primerVencimiento: draft.primerVencimiento || null, notas: draft.notas || '',
     cuotas, createdAt: Date.now()
   };
   loan.folio = generateLoanFolio(client.estado, loan.fechaInicio);
