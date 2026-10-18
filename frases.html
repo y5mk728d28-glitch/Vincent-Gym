@@ -1493,7 +1493,7 @@ function openGeminiKeyModal() {
 
 function saveGeminiKey() {
   const key = document.getElementById('gemini-key-input').value.trim();
-  if (!key.startsWith('AIza')) { showToast('Clave inválida (debe empezar con AIza)', 'error'); return; }
+  if (key.length < 15) { showToast('Clave demasiado corta', 'error'); return; }
   localStorage.setItem(GEMINI_KEY_STORAGE, key);
   closeModal('modal-gemini-key');
   updateApiKeyDisplay();
