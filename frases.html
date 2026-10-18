@@ -204,12 +204,17 @@ button:active{transform:scale(0.97)}
 <div id="screen-library" class="screen active">
   <!-- Anarcho-Capitalist banner -->
   <div style="width:100%;height:6px;background:linear-gradient(90deg,#000 50%,#FFD700 50%)"></div>
+  <!-- Update banner (hidden until new version detected) -->
+  <div id="update-banner" style="display:none;align-items:center;justify-content:space-between;background:var(--accent);color:#000;padding:10px 16px;gap:10px">
+    <span style="font-size:13px;font-weight:700">Nueva versión disponible</span>
+    <button onclick="dismissUpdate()" style="background:#000;color:var(--accent);font-size:12px;font-weight:700;padding:6px 12px;border-radius:6px">Actualizar</button>
+  </div>
+
   <div style="padding:36px 20px 0;display:flex;align-items:center;gap:14px">
     <!-- Anarcho-Capitalist flag SVG -->
     <svg width="52" height="34" viewBox="0 0 52 34" style="border-radius:4px;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.5)" xmlns="http://www.w3.org/2000/svg">
       <rect width="52" height="34" fill="#FFD700"/>
       <polygon points="0,0 52,0 0,34" fill="#000"/>
-      <!-- Circle-A symbol -->
       <text x="36" y="26" font-size="14" font-family="serif" font-weight="900" fill="#000" text-anchor="middle">Ⓐ</text>
     </svg>
     <div>
@@ -217,6 +222,17 @@ button:active{transform:scale(0.97)}
       <div style="font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:2px">Propiedad privada del conocimiento</div>
     </div>
   </div>
+
+  <!-- Welcome + Bible verse -->
+  <div style="margin:14px 16px 0;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px 16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div id="welcome-msg" style="font-size:18px;font-weight:700;color:var(--accent)">Bienvenido</div>
+      <button onclick="openUsernameModal()" style="font-size:11px;color:var(--muted);padding:4px 8px;border:1px solid var(--border);border-radius:6px">✏️ Nombre</button>
+    </div>
+    <div id="verse-text" style="font-size:13px;color:var(--text);font-style:italic;line-height:1.5"></div>
+    <div id="verse-ref" style="font-size:11px;color:var(--accent);margin-top:5px;font-weight:600"></div>
+  </div>
+
   <div class="page-header" style="padding-top:16px">
     <div>
       <div class="page-title">Biblioteca</div>
@@ -551,6 +567,22 @@ button:active{transform:scale(0.97)}
   </div>
 </div>
 
+<!-- Username Modal -->
+<div class="modal-bg" id="modal-username">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Tu nombre</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6">Se mostrará en el saludo de bienvenida.</p>
+    <div class="form-group" style="margin-left:0;margin-right:0">
+      <input type="text" id="username-input" class="form-input" placeholder="Tu nombre..." maxlength="40">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn-secondary" style="flex:1" onclick="closeModal('modal-username')">Cancelar</button>
+      <button class="btn-primary" style="flex:2" onclick="saveUsername()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- API Key Modal -->
 <div class="modal-bg" id="modal-api-key">
   <div class="modal-sheet">
@@ -631,7 +663,10 @@ button:active{transform:scale(0.97)}
 // ============================================================
 // { books: { id: { id, title, author, color, emoji, chapters: { id: { id, name, phrases: [{ id, text, addedAt }] } } } } }
 
+const APP_VERSION = '1.2';
 const STORAGE_KEY = 'bookmarked_data';
+const USERNAME_STORAGE = 'bookmarked_username';
+const VERSION_STORAGE = 'bookmarked_version';
 const API_KEY_STORAGE = 'bookmarked_api_key';
 const GEMINI_KEY_STORAGE = 'bookmarked_gemini_key';
 const PROVIDER_STORAGE = 'bookmarked_provider';
@@ -652,6 +687,34 @@ let addFromBookId = null;
 let currentProvider = 'claude';
 
 // ============================================================
+// BIBLE VERSES
+// ============================================================
+const BIBLE_VERSES = [
+  { text: "Todo lo puedo en Cristo que me fortalece.", ref: "Fil. 4:13" },
+  { text: "El Señor es mi pastor; nada me faltará.", ref: "Sal. 23:1" },
+  { text: "Jehová es mi luz y mi salvación; ¿a quién temeré?", ref: "Sal. 27:1" },
+  { text: "Confía en el Señor con todo tu corazón.", ref: "Prov. 3:5" },
+  { text: "Esfuérzate y sé valiente. No temas ni desmayes.", ref: "Jos. 1:9" },
+  { text: "La verdad os hará libres.", ref: "Juan 8:32" },
+  { text: "La paz os dejo, mi paz os doy.", ref: "Juan 14:27" },
+  { text: "El amor es sufrido y benigno; no tiene envidia.", ref: "1 Cor. 13:4" },
+  { text: "No os conforméis a este siglo, sino transformaos.", ref: "Rom. 12:2" },
+  { text: "El Señor está cerca de los de corazón quebrantado.", ref: "Sal. 34:18" },
+  { text: "Buscad primero el reino de Dios y su justicia.", ref: "Mat. 6:33" },
+  { text: "El que comenzó la buena obra en vosotros, la perfeccionará.", ref: "Fil. 1:6" },
+  { text: "Encomienda al Señor tus obras, y tus pensamientos serán afirmados.", ref: "Prov. 16:3" },
+  { text: "Mas el que persevere hasta el fin, éste será salvo.", ref: "Mat. 24:13" },
+  { text: "Porque yo sé los planes que tengo para vosotros: planes de bienestar.", ref: "Jer. 29:11" },
+  { text: "El temor de Dios es el principio de la sabiduría.", ref: "Prov. 9:10" },
+  { text: "Dios no nos ha dado espíritu de cobardía, sino de poder.", ref: "2 Tim. 1:7" },
+];
+
+function getDailyVerse() {
+  const idx = Math.floor(Math.random() * BIBLE_VERSES.length);
+  return BIBLE_VERSES[idx];
+}
+
+// ============================================================
 // INIT
 // ============================================================
 function init() {
@@ -661,6 +724,51 @@ function init() {
   updateApiKeyDisplay();
   renderLibrary();
   renderSumBookSelect();
+  renderWelcome();
+  checkVersion();
+}
+
+function renderWelcome() {
+  const name = localStorage.getItem(USERNAME_STORAGE) || '';
+  const el = document.getElementById('welcome-msg');
+  if (el) el.textContent = name ? `Hola, ${name}` : 'Bienvenido';
+  const verse = getDailyVerse();
+  const vt = document.getElementById('verse-text');
+  const vr = document.getElementById('verse-ref');
+  if (vt) vt.textContent = `"${verse.text}"`;
+  if (vr) vr.textContent = verse.ref;
+}
+
+function checkVersion() {
+  const seen = localStorage.getItem(VERSION_STORAGE);
+  const banner = document.getElementById('update-banner');
+  if (banner) {
+    if (seen && seen !== APP_VERSION) {
+      banner.style.display = 'flex';
+    } else {
+      localStorage.setItem(VERSION_STORAGE, APP_VERSION);
+    }
+  }
+}
+
+function dismissUpdate() {
+  localStorage.setItem(VERSION_STORAGE, APP_VERSION);
+  const banner = document.getElementById('update-banner');
+  if (banner) banner.style.display = 'none';
+  window.location.reload(true);
+}
+
+function openUsernameModal() {
+  document.getElementById('username-input').value = localStorage.getItem(USERNAME_STORAGE) || '';
+  openModal('modal-username');
+}
+
+function saveUsername() {
+  const val = document.getElementById('username-input').value.trim();
+  localStorage.setItem(USERNAME_STORAGE, val);
+  closeModal('modal-username');
+  renderWelcome();
+  showToast('Nombre guardado', 'success');
 }
 
 function loadData() {
@@ -1086,18 +1194,11 @@ Instrucciones:
 Responde solo con las frases, una por línea.`;
 
 function geminiUrl(key, model) {
-  // OAuth tokens (AQ...) use Bearer auth; standard API keys (AIza...) use ?key= param
-  const isOAuth = !key.startsWith('AIza');
-  return isOAuth
-    ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
-    : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 }
 
-function geminiHeaders(key) {
-  const isOAuth = !key.startsWith('AIza');
-  return isOAuth
-    ? { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` }
-    : { 'Content-Type': 'application/json' };
+function geminiHeaders() {
+  return { 'Content-Type': 'application/json' };
 }
 
 async function callVisionAPI(base64, mediaType, prompt) {
@@ -1107,7 +1208,7 @@ async function callVisionAPI(base64, mediaType, prompt) {
     const res = await fetch(geminiUrl(key, 'gemini-3.8-flash'),
       {
         method: 'POST',
-        headers: geminiHeaders(key),
+        headers: geminiHeaders(),
         body: JSON.stringify({
           contents: [{ parts: [
             { inline_data: { mime_type: mediaType, data: base64 } },
@@ -1158,7 +1259,7 @@ async function callTextAPI(prompt) {
     const res = await fetch(geminiUrl(key, 'gemini-3.8-flash'),
       {
         method: 'POST',
-        headers: geminiHeaders(key),
+        headers: geminiHeaders(),
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
       }
     );
