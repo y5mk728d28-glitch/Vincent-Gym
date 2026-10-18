@@ -1088,7 +1088,7 @@ async function callVisionAPI(base64, mediaType, prompt) {
   if (currentProvider === 'gemini') {
     const key = localStorage.getItem(GEMINI_KEY_STORAGE);
     if (!key) throw new Error('no_key_gemini');
-    const res = await fetch(geminiUrl(key, 'gemini-2.5-flash'),
+    const res = await fetch(geminiUrl(key, 'gemini-3.8-flash'),
       {
         method: 'POST',
         headers: geminiHeaders(key),
@@ -1139,7 +1139,7 @@ async function callTextAPI(prompt) {
   if (currentProvider === 'gemini') {
     const key = localStorage.getItem(GEMINI_KEY_STORAGE);
     if (!key) throw new Error('no_key_gemini');
-    const res = await fetch(geminiUrl(key, 'gemini-2.5-flash'),
+    const res = await fetch(geminiUrl(key, 'gemini-3.8-flash'),
       {
         method: 'POST',
         headers: geminiHeaders(key),
