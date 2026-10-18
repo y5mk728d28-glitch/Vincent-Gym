@@ -1017,9 +1017,16 @@ function onBookSelectChange() {
   const val = document.getElementById('select-book').value;
   const isNew = val === '__new__';
   document.getElementById('new-book-fields').style.display = isNew ? 'block' : 'none';
-  document.getElementById('chapter-field').style.display = (val && !isNew) ? 'block' : 'none';
+  // Always show chapter field when any book option is selected
+  document.getElementById('chapter-field').style.display = val ? 'block' : 'none';
   if (val && !isNew) {
     renderAddChapterSelect(val);
+  } else if (isNew) {
+    // New book always needs a new chapter — show input directly
+    const sel = document.getElementById('select-chapter');
+    sel.innerHTML = '<option value="__new__">+ Nuevo capítulo</option>';
+    sel.value = '__new__';
+    document.getElementById('new-chapter-fields').style.display = 'block';
   }
 }
 
@@ -1030,8 +1037,14 @@ function renderAddChapterSelect(bookId) {
   sel.innerHTML = '<option value="">— Seleccionar capítulo —</option>' +
     chapters.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('') +
     '<option value="__new__">+ Crear nuevo capítulo</option>';
-  sel.value = '';
-  document.getElementById('new-chapter-fields').style.display = 'none';
+  // Auto-open chapter name input if book has no chapters yet
+  if (!chapters.length) {
+    sel.value = '__new__';
+    document.getElementById('new-chapter-fields').style.display = 'block';
+  } else {
+    sel.value = '';
+    document.getElementById('new-chapter-fields').style.display = 'none';
+  }
 }
 
 function onChapterSelectChange() {
@@ -1179,7 +1192,7 @@ async function analyzePhoto() {
 
   // Resolve chapter
   let chapterId = document.getElementById('select-chapter').value;
-  if (bookId !== '__new__' && !chapterId) { showToast('Selecciona un capítulo', 'error'); return; }
+  if (!chapterId) { showToast('Escribe el nombre del capítulo', 'error'); return; }
 
   if (chapterId === '__new__') {
     const name = document.getElementById('new-chapter-name').value.trim();
