@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BookMarked">
+<meta name="mobile-web-app-capable" content="yes">
 <title>BookMarked — Lector de Libros</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -231,6 +235,7 @@ button:active{transform:scale(0.97)}
     </div>
     <div id="verse-text" style="font-size:13px;color:var(--text);font-style:italic;line-height:1.5"></div>
     <div id="verse-ref" style="font-size:11px;color:var(--accent);margin-top:5px;font-weight:600"></div>
+    <div id="verse-heb" style="font-size:15px;color:rgba(255,215,0,0.5);margin-top:6px;text-align:right;direction:rtl;font-family:serif;letter-spacing:1px"></div>
   </div>
 
   <div class="page-header" style="padding-top:16px">
@@ -690,23 +695,23 @@ let currentProvider = 'claude';
 // BIBLE VERSES
 // ============================================================
 const BIBLE_VERSES = [
-  { text: "Todo lo puedo en Cristo que me fortalece.", ref: "Fil. 4:13" },
-  { text: "El Señor es mi pastor; nada me faltará.", ref: "Sal. 23:1" },
-  { text: "Jehová es mi luz y mi salvación; ¿a quién temeré?", ref: "Sal. 27:1" },
-  { text: "Confía en el Señor con todo tu corazón.", ref: "Prov. 3:5" },
-  { text: "Esfuérzate y sé valiente. No temas ni desmayes.", ref: "Jos. 1:9" },
-  { text: "La verdad os hará libres.", ref: "Juan 8:32" },
-  { text: "La paz os dejo, mi paz os doy.", ref: "Juan 14:27" },
-  { text: "El amor es sufrido y benigno; no tiene envidia.", ref: "1 Cor. 13:4" },
-  { text: "No os conforméis a este siglo, sino transformaos.", ref: "Rom. 12:2" },
-  { text: "El Señor está cerca de los de corazón quebrantado.", ref: "Sal. 34:18" },
-  { text: "Buscad primero el reino de Dios y su justicia.", ref: "Mat. 6:33" },
-  { text: "El que comenzó la buena obra en vosotros, la perfeccionará.", ref: "Fil. 1:6" },
-  { text: "Encomienda al Señor tus obras, y tus pensamientos serán afirmados.", ref: "Prov. 16:3" },
-  { text: "Mas el que persevere hasta el fin, éste será salvo.", ref: "Mat. 24:13" },
-  { text: "Porque yo sé los planes que tengo para vosotros: planes de bienestar.", ref: "Jer. 29:11" },
-  { text: "El temor de Dios es el principio de la sabiduría.", ref: "Prov. 9:10" },
-  { text: "Dios no nos ha dado espíritu de cobardía, sino de poder.", ref: "2 Tim. 1:7" },
+  { text: "Todo lo puedo en Cristo que me fortalece.", ref: "Fil. 4:13",   heb: "כֹּל אוּכַל בַּמְחַזְּקִי" },
+  { text: "El Señor es mi pastor; nada me faltará.", ref: "Sal. 23:1",     heb: "יְהוָה רֹעִי לֹא אֶחְסָר" },
+  { text: "Jehová es mi luz y mi salvación; ¿a quién temeré?", ref: "Sal. 27:1", heb: "יְהוָה אוֹרִי וְיִשְׁעִי" },
+  { text: "Confía en el Señor con todo tu corazón.", ref: "Prov. 3:5",     heb: "בְּטַח אֶל-יְהוָה בְּכָל-לִבֶּךָ" },
+  { text: "Esfuérzate y sé valiente. No temas ni desmayes.", ref: "Jos. 1:9", heb: "חֲזַק וֶאֱמָץ" },
+  { text: "La verdad os hará libres.", ref: "Juan 8:32",                   heb: "וְהָאֱמֶת תְּשַׁחְרֵר אֶתְכֶם" },
+  { text: "La paz os dejo, mi paz os doy.", ref: "Juan 14:27",             heb: "שָׁלוֹם אֲנִי נוֹתֵן לָכֶם" },
+  { text: "El amor es sufrido y benigno; no tiene envidia.", ref: "1 Cor. 13:4", heb: "הָאַהֲבָה אֱרֶךְ אַפַּיִם" },
+  { text: "No os conforméis a este siglo, sino transformaos.", ref: "Rom. 12:2", heb: "אַל-תִּתְחַבְּרוּ עִם-הָעוֹלָם" },
+  { text: "El Señor está cerca de los de corazón quebrantado.", ref: "Sal. 34:18", heb: "קָרוֹב יְהוָה לְנִשְׁבְּרֵי-לֵב" },
+  { text: "Buscad primero el reino de Dios y su justicia.", ref: "Mat. 6:33", heb: "בַּקְּשׁוּ בָּרִאשׁוֹנָה" },
+  { text: "El que comenzó la buena obra en vosotros, la perfeccionará.", ref: "Fil. 1:6", heb: "הֵחֵל בָּכֶם מַעֲשֶׂה טוֹב" },
+  { text: "Encomienda al Señor tus obras, y tus pensamientos serán afirmados.", ref: "Prov. 16:3", heb: "גֹּל אֶל-יְהוָה מַעֲשֶׂיךָ" },
+  { text: "Mas el que persevere hasta el fin, éste será salvo.", ref: "Mat. 24:13", heb: "הַמַּחֲזִיק עַד-הַקֵּץ יִוָּשֵׁעַ" },
+  { text: "Porque yo sé los planes que tengo para vosotros: planes de bienestar.", ref: "Jer. 29:11", heb: "מַחְשָׁבוֹת שָׁלוֹם וְלֹא לְרָעָה" },
+  { text: "El temor de Dios es el principio de la sabiduría.", ref: "Prov. 9:10", heb: "רֵאשִׁית חָכְמָה יִרְאַת יְהוָה" },
+  { text: "Dios no nos ha dado espíritu de cobardía, sino de poder.", ref: "2 Tim. 1:7", heb: "רוּחַ גְּבוּרָה וְאַהֲבָה" },
 ];
 
 function getDailyVerse() {
@@ -735,8 +740,10 @@ function renderWelcome() {
   const verse = getDailyVerse();
   const vt = document.getElementById('verse-text');
   const vr = document.getElementById('verse-ref');
+  const vh = document.getElementById('verse-heb');
   if (vt) vt.textContent = `"${verse.text}"`;
   if (vr) vr.textContent = verse.ref;
+  if (vh) vh.textContent = verse.heb;
 }
 
 function checkVersion() {
