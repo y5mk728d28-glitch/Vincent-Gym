@@ -1069,15 +1069,29 @@ Instrucciones:
 
 Responde solo con las frases, una por línea.`;
 
+function geminiUrl(key, model) {
+  // OAuth tokens (AQ...) use Bearer auth; standard API keys (AIza...) use ?key= param
+  const isOAuth = !key.startsWith('AIza');
+  return isOAuth
+    ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+    : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+}
+
+function geminiHeaders(key) {
+  const isOAuth = !key.startsWith('AIza');
+  return isOAuth
+    ? { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` }
+    : { 'Content-Type': 'application/json' };
+}
+
 async function callVisionAPI(base64, mediaType, prompt) {
   if (currentProvider === 'gemini') {
     const key = localStorage.getItem(GEMINI_KEY_STORAGE);
     if (!key) throw new Error('no_key_gemini');
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+    const res = await fetch(geminiUrl(key, 'gemini-2.5-flash'),
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: geminiHeaders(key),
         body: JSON.stringify({
           contents: [{ parts: [
             { inline_data: { mime_type: mediaType, data: base64 } },
@@ -1125,11 +1139,10 @@ async function callTextAPI(prompt) {
   if (currentProvider === 'gemini') {
     const key = localStorage.getItem(GEMINI_KEY_STORAGE);
     if (!key) throw new Error('no_key_gemini');
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+    const res = await fetch(geminiUrl(key, 'gemini-2.5-flash'),
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: geminiHeaders(key),
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
       }
     );
