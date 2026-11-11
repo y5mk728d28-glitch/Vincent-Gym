@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="build-version" content="2026-11-11-01">
+<meta name="build-version" content="2026-11-11-02">
 <title>Vincent Forge — Training Log</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -3934,6 +3934,7 @@ function toggleExerciseCard(exIdx, evt) {
 function buildNotationHtml(ex) {
   const workSets = ex.sets.filter(s=>!s.approx);
   const approxSetsForNotation = ex.sets.filter(s=>s.approx);
+  const machineLine = ex.refMachineLabel ? `Máquina/polea la vez pasada: <strong>${ex.refMachineLabel}</strong><br>` : '';
   if (ex.muscle === 'Cardio') {
     const workDur = workSets.map(s => s.duration || '—').join('/');
     const workDist = workSets.map(s => s.distance || '—').join('/');
@@ -3941,6 +3942,7 @@ function buildNotationHtml(ex) {
     const approxDur = approxSetsForNotation.map(s => s.duration || '—').join('/');
     const approxDist = approxSetsForNotation.map(s => s.distance || '—').join('/');
     return `
+      ${machineLine}
       ${approxSetsForNotation.length ? `Aproximación: <strong>${approxDur} min &nbsp; ${approxDist} ${distUnit}</strong><br>` : ''}
       Trabajo: <strong>${workDur || '—'} min &nbsp; ${workDist || '—'} ${distUnit}</strong>
     `;
@@ -3953,6 +3955,7 @@ function buildNotationHtml(ex) {
   const workUnit = (workSets.find(s=>s.unit)||{}).unit || 'lb';
   const approxUnit = (approxSetsForNotation.find(s=>s.unit)||{}).unit || 'lb';
   return `
+    ${machineLine}
     ${approxSetsForNotation.length ? `Aproximación: <strong>${approxWeights} ${approxUnit} &nbsp; ${approxReps}</strong><br>` : ''}
     Trabajo: <strong>${workWeights || '—'} ${workUnit} &nbsp; ${workReps}</strong>
   `;
@@ -4085,6 +4088,10 @@ function renderExercises() {
         <button class="remove-ex-btn" onclick="event.stopPropagation();removeExercise(${idx})">✕</button>
       </div>
       <div class="exercise-body">
+        <div class="youtube-row" style="margin-bottom:10px;">
+          <label>Máquina / Polea (opcional)${ex.refMachineLabel ? ' · ant: ' + ex.refMachineLabel : ''}</label>
+          <input type="text" class="youtube-input" placeholder="${ex.refMachineLabel || 'Ej: Máquina 2, la verde...'}" value="${ex.machineLabel||''}" onchange="updateMachineLabel(${idx},this.value)">
+        </div>
         <div class="sets-row">${setsHtml}</div>
         <button class="add-set-btn" onclick="addSet(${idx})">+ Agregar serie</button>
         <div class="notation-preview">${notationHtml}</div>
@@ -4150,6 +4157,11 @@ function updateYoutube(exIdx, val) {
   const exercises = getWeekExercises();
   exercises[exIdx].youtubeLink = val;
   renderExercises();
+  saveState();
+}
+function updateMachineLabel(exIdx, val) {
+  const exercises = getWeekExercises();
+  exercises[exIdx].machineLabel = val;
   saveState();
 }
 
@@ -4453,6 +4465,7 @@ function buildExerciseFromTemplate(template) {
       name: template.name, muscle: template.muscle,
       sets,
       recovery:0, failure:0, fatigue:0, userRating:0,
+      machineLabel: '', refMachineLabel: (last && last.machineLabel) || '',
       youtubeLink: template.youtubeLink || (EXERCISE_DB.find(e=>e.name===template.name)||{}).youtubeLink || ''
     };
   }
@@ -4481,6 +4494,7 @@ function buildExerciseFromTemplate(template) {
     name: template.name, muscle: template.muscle,
     sets: approxSets.concat(workingSets),
     recovery:0, failure:0, fatigue:0, userRating:0,
+    machineLabel: '', refMachineLabel: (last && last.machineLabel) || '',
     youtubeLink: template.youtubeLink || (EXERCISE_DB.find(e=>e.name===template.name)||{}).youtubeLink || ''
   };
 }
@@ -5136,6 +5150,7 @@ function addExerciseToWeek(name, muscle, skipClose) {
       name, muscle,
       sets,
       recovery: 0, failure: 0, fatigue: 0, userRating: 0,
+      machineLabel: '', refMachineLabel: (last && last.machineLabel) || '',
       youtubeLink: (dbDefault && dbDefault.youtubeLink) || ''
     });
     if (!skipClose) closeExerciseModal();
@@ -5175,6 +5190,7 @@ function addExerciseToWeek(name, muscle, skipClose) {
     sets: approxSets.concat(workingSets),
     recovery: 0, failure: 0, fatigue: 0, userRating: 0,
     isTimeBased: false, timeUnit: 'seg',
+    machineLabel: '', refMachineLabel: (last && last.machineLabel) || '',
     youtubeLink: (dbDefault && dbDefault.youtubeLink) || ''
   });
   if (!skipClose) closeExerciseModal();
