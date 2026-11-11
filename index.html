@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="build-version" content="2026-09-15-01">
+<meta name="build-version" content="2026-11-11-01">
 <title>Vincent Forge — Training Log</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -4886,20 +4886,29 @@ function addCustomExercise() {
   document.getElementById('customExMuscle').value = '';
 }
 function getLastWeekDataFor(exerciseName) {
-  // Search backwards through previous weeks (within same year) for this exercise name.
-  // Keep scanning past a week where the exercise merely exists but was never
+  // Walk backward day-by-day in true chronological order (across week AND
+  // day boundaries), anchored to the day currently being viewed/edited —
+  // not just "previous weeks". Otherwise an exercise repeated on a later
+  // day of the SAME week (e.g. Pecho on Lunes, again on Viernes) never
+  // found Monday's numbers, since that search only ever looked at weeks
+  // strictly before the current one.
+  // Keep scanning past a day where the exercise merely exists but was never
   // actually filled in (no real weight/duration logged) — otherwise a single
-  // blank week in between silently wipes out the reference values from
+  // blank day/week in between silently wipes out the reference values from
   // further back, even though older real data does exist.
   const yd = getCurrentYearData();
+  const anchorDate = state.mode === 'day'
+    ? new Date(getExactDateFor(state.currentWeek, state.currentDay) + 'T00:00:00')
+    : new Date();
   let fallback = null;
-  for (let w = state.currentWeek - 1; w >= 1; w--) {
-    let pool = [];
-    const wd = yd.weeksData[w];
+  for (let offset = 1; offset <= 371; offset++) {
+    const d = new Date(anchorDate); d.setDate(d.getDate() - offset);
+    const { week, day } = dateToWeekDay(yd, d);
+    if (week < 1) break;
+    const wd = yd.weeksData[week];
     if (!wd) continue;
-    if (Array.isArray(wd)) pool = wd;
-    else Object.values(wd).forEach(arr => { if (Array.isArray(arr)) pool = pool.concat(arr); });
-    const found = pool.find(e => e.name === exerciseName);
+    const list = Array.isArray(wd) ? wd : (wd[day] || []);
+    const found = list.find(e => e.name === exerciseName);
     if (!found) continue;
     if (!fallback) fallback = found;
     const hasRealData = (found.sets||[]).some(s => !s.approx && (s.weight || s.duration));
